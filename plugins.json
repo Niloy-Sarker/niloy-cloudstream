@@ -1,0 +1,81 @@
+[
+    {
+        "iconUrl": "https://dflix.discoveryftp.net/assets/images/icon.png",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Niloy-Sarker/niloy-cloudstream",
+        "fileSize": 18211,
+        "status": 1,
+        "language": "bn",
+        "authors": [
+            "Niloy"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime",
+            "AnimeMovie",
+            "OVA",
+            "Cartoon",
+            "AsianDrama",
+            "Others",
+            "Documentary"
+        ],
+        "version": 8,
+        "internalName": "Dflix",
+        "description": "Discovery FTP BDIX Provider",
+        "url": "https://raw.githubusercontent.com/Niloy-Sarker/niloy-cloudstream/builds/Dflix.cs3",
+        "name": "Dflix"
+    },
+    {
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Niloy-Sarker/niloy-cloudstream",
+        "fileSize": 67726,
+        "status": 1,
+        "language": "bn",
+        "authors": [
+            "Niloy"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime",
+            "AnimeMovie",
+            "OVA",
+            "Cartoon",
+            "AsianDrama",
+            "Others",
+            "Documentary"
+        ],
+        "version": 2,
+        "internalName": "DhakaFlix-tmdb",
+        "description": "DhakaFlix BDIX Provider with TMDB support for media description",
+        "url": "https://raw.githubusercontent.com/Niloy-Sarker/niloy-cloudstream/builds/DhakaFlix-tmdb.cs3",
+        "name": "DhakaFlix-tmdb"
+    },
+    {
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Niloy-Sarker/niloy-cloudstream",
+        "fileSize": 30675,
+        "status": 1,
+        "language": "bn",
+        "authors": [
+            "Niloy"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime",
+            "AnimeMovie",
+            "OVA",
+            "Cartoon",
+            "AsianDrama",
+            "Others",
+            "Documentary"
+        ],
+        "version": 2,
+        "internalName": "FTPBD",
+        "description": "FTPBD BDIX Emby Server Provider - Access media from media.ftpbd.net:8096",
+        "url": "https://raw.githubusercontent.com/Niloy-Sarker/niloy-cloudstream/builds/FTPBD.cs3",
+        "name": "FTPBD"
+    }
+]
