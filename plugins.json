@@ -1,0 +1,127 @@
+[
+    {
+        "iconUrl": "https://dflix.discoveryftp.net/assets/images/icon.png",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Niloy-Sarker/niloy-cloudstream",
+        "fileSize": 31809,
+        "status": 1,
+        "language": "bn",
+        "authors": [
+            "Niloy"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime",
+            "AnimeMovie",
+            "OVA",
+            "Cartoon",
+            "AsianDrama",
+            "Others",
+            "Documentary"
+        ],
+        "version": 8,
+        "internalName": "Dflix",
+        "description": "Discovery FTP BDIX Provider",
+        "url": "https://raw.githubusercontent.com/Niloy-Sarker/niloy-cloudstream/builds/Dflix.cs3",
+        "name": "Dflix"
+    },
+    {
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Niloy-Sarker/niloy-cloudstream",
+        "fileSize": 73561,
+        "status": 1,
+        "language": "bn",
+        "authors": [
+            "Niloy"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime",
+            "AnimeMovie",
+            "OVA",
+            "Cartoon",
+            "AsianDrama",
+            "Others",
+            "Documentary"
+        ],
+        "version": 2,
+        "internalName": "DhakaFlix-tmdb",
+        "description": "DhakaFlix BDIX Provider with TMDB support for media description",
+        "url": "https://raw.githubusercontent.com/Niloy-Sarker/niloy-cloudstream/builds/DhakaFlix-tmdb.cs3",
+        "name": "DhakaFlix-tmdb"
+    },
+    {
+        "iconUrl": "https://fmftp.net/favicon.ico",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Niloy-Sarker/niloy-cloudstream",
+        "fileSize": 59853,
+        "status": 1,
+        "language": "en",
+        "authors": [
+            "Niloy"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 1,
+        "internalName": "FMFTP",
+        "description": "FMFTP - Free Movies FTP Provider",
+        "url": "https://raw.githubusercontent.com/Niloy-Sarker/niloy-cloudstream/builds/FMFTP.cs3",
+        "name": "FMFTP"
+    },
+    {
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Niloy-Sarker/niloy-cloudstream",
+        "fileSize": 39210,
+        "status": 1,
+        "language": "bn",
+        "authors": [
+            "Niloy"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime",
+            "AnimeMovie",
+            "OVA",
+            "Cartoon",
+            "AsianDrama",
+            "Others",
+            "Documentary"
+        ],
+        "version": 3,
+        "internalName": "FTPBD",
+        "description": "FTPBD BDIX Emby Server Provider - Access media from media.ftpbd.net:8096",
+        "url": "https://raw.githubusercontent.com/Niloy-Sarker/niloy-cloudstream/builds/FTPBD.cs3",
+        "name": "FTPBD"
+    },
+    {
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/Niloy-Sarker/niloy-cloudstream",
+        "fileSize": 39222,
+        "status": 1,
+        "language": "hi",
+        "authors": [
+            "Niloy"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries",
+            "Anime",
+            "AnimeMovie",
+            "OVA",
+            "Cartoon",
+            "AsianDrama",
+            "Others",
+            "Documentary"
+        ],
+        "version": 1,
+        "internalName": "Roarzone",
+        "description": "RoarZone Emby Server Provider - Access media from play.roarzone.info",
+        "url": "https://raw.githubusercontent.com/Niloy-Sarker/niloy-cloudstream/builds/Roarzone.cs3",
+        "name": "Roarzone"
+    }
+]
