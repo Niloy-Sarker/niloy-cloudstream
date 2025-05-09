@@ -1,0 +1,8 @@
+{
+    "name": "DhakaFlix BDIX",
+    "description": "DhakaFlix BDIX",
+    "manifestVersion": 1,
+    "pluginLists": [
+      "https://raw.githubusercontent.com/Niloy-Sarker/DhakaFlix_Cloudstream/builds/plugins.json"
+    ]
+}

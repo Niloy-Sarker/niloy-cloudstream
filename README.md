@@ -1,58 +1,28 @@
-**⚠️ This is currently under development, dont use it yet if you're not comfortable with constantly merging new changes**
-
-# `Cloudstream3 Plugin Repo Template`
-
-Template for a [Cloudstream3](https://github.com/recloudstream) plugin repo
-
-**⚠️ Make sure you check "Include all branches" when using this template**
-
- 
-## Getting started with writing your first plugin
-
-This template includes 1 example plugin.
-
-1. Open the root build.gradle.kts, read the comments and replace all the placeholders
-2. Familiarize yourself with the project structure. Most files are commented
-3. Build or deploy your first plugin using:
-   - Windows: `.\gradlew.bat ExampleProvider:make` or `.\gradlew.bat ExampleProvider:deployWithAdb`
-   - Linux & Mac: `./gradlew ExampleProvider:make` or `./gradlew ExampleProvider:deployWithAdb`
 
 
-## Granting All Files Access on Newer Android Devices
+## <a href="https://raw.githubusercontent.com/Niloy-Sarker/DhakaFlix_Cloudstream/master/repo.json">Install Repo</a>
 
-For local plugin testing, you need to grant the app "All Files Access" on newer Android devices (Android 11 and above). Here’s how to do it:
+### Detailed Guide to Install Repo
 
-### Using ADB
+To install the DhakaFlix Cloudstream repository, follow these steps:
 
-* `adb shell appops set --uid PACKAGE_NAME MANAGE_EXTERNAL_STORAGE allow`
-* Replace `PACKAGE_NAME` with the name of the package for the Cloudstream3 version you are using:
-   - debug: `com.lagradost.cloudstream3.prerelease.debug`
-   - prerelease: `com.lagradost.cloudstream3.prerelease`
-   - stable: `com.lagradost.cloudstream3`
+1. Open the Cloudstream app on your device.
+2. Navigate to **Settings** → **Extensions**.
+3. Tap on **Add Repository**.
+4. Enter dhakaflixcs3 
+5. Tap **Add** to save the repository.
+6. Once added, you can browse and install the available extensions from the DhakaFlix repository.
 
-### Manually
+## How to Get a TMDb API Key
 
-1. **Open Settings**: Go to your device’s Settings menu.
+To use DhakaFlix-tmdb, you need a TMDb API key. Follow these steps to obtain one:
 
-2. **Navigate to Special Access**:
-   - Tap on "Apps & notifications" or "Apps".
-   - Select "Special app access" or "Special access".
+1. Go to the [TMDb website](https://www.themoviedb.org/).
+2. Create a free account or log in if you already have one.
+3. After logging in, click on your profile icon (top right) and select **Settings**.
+4. In the left sidebar, click on **API**.
+5. Fill out the API request form with the required information.
+6. Once approved, you will see your API key listed under **API Key**.
+7. Copy this key and use it in the DhakaFlix-tmdb extension as needed.
 
-3. **Select All Files Access**:
-   - Tap on "All files access".
-   - It may be under the three vertical dots menu towards the top of the screen.
-
-4. **Grant Access to the App**: Find the app in the list and tap on it to toggle it, if it is not already enabled.
-
-6. **Restart the App**: Close and reopen the app to apply the changes.
-
-
-## License
-
-Everything in this repo is released into the public domain. You may use it however you want with no conditions whatsoever
-
-
-## Attribution
-
-This template as well as the gradle plugin and the whole plugin system is **heavily** based on [Aliucord](https://github.com/Aliucord).
-*Go use it, it's a great mobile discord client mod!*
+**Note:** Keep your API key private and do not share it publicly.
