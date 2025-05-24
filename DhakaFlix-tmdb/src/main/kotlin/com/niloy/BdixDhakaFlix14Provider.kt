@@ -50,15 +50,13 @@ open class BdixDhakaFlix14Provider : MainAPI() {
 
     open val year = 2025
     open val tvSeriesKeyword: List<String>? = listOf("KOREAN%20TV%20%26%20WEB%20Series")
-    open val serverName: String = "DHAKA-FLIX-14"
-
-    // Simple cache implementation
+    open val serverName: String = "DHAKA-FLIX-14"    // Simple cache implementation with optimized settings
     companion object {
         private val caches = mutableMapOf<String, ProviderCache>()
-        private const val POSTER_CACHE_DURATION = 2 * 60 * 60 * 1000L // 2 hours
-        private const val SEARCH_CACHE_DURATION = 1 * 60 * 60 * 1000L // 1 hour
-        private const val TMDB_CACHE_DURATION = 30 * 60 * 1000L // 30 minutes
-        private const val BATCH_SIZE = 4 // Number of items to process in parallel
+        private const val POSTER_CACHE_DURATION = 1 * 60 * 60 * 1000L // 1 hour (reduced from 2)
+        private const val SEARCH_CACHE_DURATION = 30 * 60 * 1000L // 30 minutes (reduced from 1 hour)  
+        private const val TMDB_CACHE_DURATION = 15 * 60 * 1000L // 15 minutes (reduced from 30)
+        private const val BATCH_SIZE = 6 // Increased for better performance
         
         @Synchronized
         private fun getProviderCache(providerName: String): ProviderCache {
@@ -84,16 +82,14 @@ open class BdixDhakaFlix14Provider : MainAPI() {
         ): T? {
             val (value, timestamp) = cache[key] ?: return null
             return if (System.currentTimeMillis() - timestamp < duration) value else null
-        }
-
-        fun <T> addToCache(
+        }        fun <T> addToCache(
             cache: MutableMap<String, Pair<T?, Long>>,
             key: String,
             value: T?
         ) {
             synchronized(cache) {
-                // Clear old entries if cache is too large
-                if (cache.size > 100) {
+                // More aggressive cache cleanup for better performance
+                if (cache.size > 50) { // Reduced from 100
                     val currentTime = System.currentTimeMillis()
                     // Remove expired entries
                     val iterator = cache.entries.iterator()
@@ -104,9 +100,9 @@ open class BdixDhakaFlix14Provider : MainAPI() {
                         }
                     }
                     // If still too large, remove oldest entries
-                    if (cache.size > 50) {
+                    if (cache.size > 25) { // Reduced from 50
                         val sortedEntries = cache.entries.sortedBy { it.value.second }
-                        sortedEntries.take(sortedEntries.size - 50).forEach { cache.remove(it.key) }
+                        sortedEntries.take(sortedEntries.size - 25).forEach { cache.remove(it.key) }
                     }
                 }
                 cache[key] = Pair(value, System.currentTimeMillis())
@@ -189,13 +185,11 @@ open class BdixDhakaFlix14Provider : MainAPI() {
             rows.filterIndexed { index, _ -> index in safeStartIndex until safeEndIndex }
         } else {
             emptyList()
-        }
-
-        // Process items in smaller batches
+        }        // Process items in smaller batches - enable local poster loading for better UX
         val home = homeResponse.chunked(BATCH_SIZE).flatMap { chunk ->
             chunk.map { post ->
                 async {
-                    getPostResult(post, loadTmdbData = false) // Don't load TMDB data initially
+                    getPostResult(post, loadTmdbData = false, loadLocalPosters = true) // Enable local poster loading
                 }
             }.awaitAll()
         }
@@ -214,11 +208,10 @@ open class BdixDhakaFlix14Provider : MainAPI() {
             .replace(Regex("\\s*\\([^)]*\\)"), "") // Remove any remaining parentheses content
             .replace(Regex("\\s+"), " ") // Replace multiple spaces with single space
             .trim()
-    }
-
-    private suspend fun getPostResult(
+    }    private suspend fun getPostResult(
         post: Element,
-        loadTmdbData: Boolean = false
+        loadTmdbData: Boolean = false,
+        loadLocalPosters: Boolean = false
     ): SearchResponse {
         val folderHtml = post.select("td.fb-n > a")
         val rawName = folderHtml.text()
@@ -230,8 +223,12 @@ open class BdixDhakaFlix14Provider : MainAPI() {
             lazyLoadTmdbData(name, isMovie = !containsAnyLoop(url, tvSeriesKeyword))
         } else null
         
-        // First try to get poster from cache
-        val posterUrl = findPosterUrl(url)
+        // Load local posters if requested (lightweight operation)
+        val posterUrl = when {
+            loadTmdbData -> findPosterUrl(url) // Full poster loading including TMDB fallback
+            loadLocalPosters -> DhakaFlixUtils.findPosterLight(url, mainUrl) // Local posters only
+            else -> null // No poster loading
+        }
         
         return newAnimeSearchResponse(name, url, TvType.Movie) {
             addDubStatus(
@@ -243,30 +240,51 @@ open class BdixDhakaFlix14Provider : MainAPI() {
                 this.posterUrl = posterUrl
             }
         }
-    }
-
-    override suspend fun search(query: String): List<SearchResponse> {
-        // Use the shared utility method for searching, passing this instance as the API
+    }    override suspend fun search(query: String): List<SearchResponse> {
+        // Use fast search with lightweight local poster loading
         return DhakaFlixUtils.doSearch(
             query = query,
             mainUrl = mainUrl,
             serverName = serverName,
             api = this,
-            findPosterFunc = { url -> findPosterUrl(url) }
+            findPosterFunc = { url -> DhakaFlixUtils.findPosterLight(url, mainUrl) } // Enable local poster loading
         )
     }
 
     // Use the common utility function for nameFromUrl
     protected fun nameFromUrl(href: String): String {
         return DhakaFlixUtils.nameFromUrl(href)
-    }
-    
-    // Update findPosterUrl to use the new cache
+    }      // Update findPosterUrl to prioritize local images over TMDB
     suspend fun findPosterUrl(contentUrl: String): String? {
         val providerCache = getProviderCache(name)
-        providerCache.getFromCache(providerCache.getPosterCache(), contentUrl, POSTER_CACHE_DURATION)?.let { return it }
         
-        val result = DhakaFlixUtils.findPoster(contentUrl, mainUrl)
+        // First check cache
+        providerCache.getFromCache(providerCache.getPosterCache(), contentUrl, POSTER_CACHE_DURATION)?.let { 
+            return it 
+        }
+        
+        // Priority 1: Look for local images in content folder
+        val localPoster = DhakaFlixUtils.findPoster(contentUrl, mainUrl)
+        if (localPoster != null) {
+            providerCache.addToCache(providerCache.getPosterCache(), contentUrl, localPoster)
+            return localPoster
+        }
+        
+        // Priority 2: Try to get from TMDB only if no local poster found
+        // Extract name from URL for TMDB search
+        val name = contentUrl.split("/").filter { it.isNotEmpty() }.lastOrNull()
+            ?.let { URLDecoder.decode(it, StandardCharsets.UTF_8.toString()) }
+            ?.let { cleanNameForSearch(it) }
+        
+        val result = if (name != null) {
+            try {
+                val tmdbData = lazyLoadTmdbData(name, !containsAnyLoop(contentUrl, tvSeriesKeyword))
+                tmdbData?.posterPath?.let { TmdbHelper.getPosterUrl(it, isDetail = false) }
+            } catch (e: Exception) {
+                null
+            }
+        } else null
+        
         providerCache.addToCache(providerCache.getPosterCache(), contentUrl, result)
         return result
     }
@@ -297,14 +315,16 @@ open class BdixDhakaFlix14Provider : MainAPI() {
             .let { URLDecoder.decode(it, StandardCharsets.UTF_8.toString()) }
             .replace(Regex("\\[.*?\\]"), "")
             .trim()
-        
-        // Load TMDB data with details since this is a detail view
+          // Load TMDB data with details since this is a detail view
         val tmdbData = lazyLoadTmdbData(name, !containsAnyLoop(url, tvSeriesKeyword), loadDetails = true)
         
-        // Try to get poster from cache first
-        imageLink = findPosterUrl(url)
-            ?: tmdbData?.posterPath?.let { TmdbHelper.getPosterUrl(it, isDetail = true) }
-            ?: ""
+        // Priority 1: Try to get local poster from content folder first
+        imageLink = findPosterUrl(url) ?: ""
+        
+        // Priority 2: If no local poster found, use TMDB poster
+        if (imageLink.isEmpty()) {
+            imageLink = tmdbData?.posterPath?.let { TmdbHelper.getPosterUrl(it, isDetail = true) } ?: ""
+        }
         
         if (tmdbData != null) {
             tmdbId = tmdbData.id
@@ -333,9 +353,33 @@ open class BdixDhakaFlix14Provider : MainAPI() {
                     seasonNum++
                     link = mainUrl + it.select("td.fb-n > a").attr("href")
                     // Extract season data with TMDB ID for episode details
-                    seasonExtractor(link, episodesData, seasonNum, tmdbId)
-                } else if (imageLink.isEmpty() && it.select("td.fb-n > a").attr("href").contains(".jpg", ignoreCase = true)) {
-                    imageLink = mainUrl + it.select("td.fb-n > a").attr("href")
+                    seasonExtractor(link, episodesData, seasonNum, tmdbId)                } else if (imageLink.isEmpty()) {
+                    val filename = it.select("td.fb-n > a").text().lowercase()
+                    val href = it.select("td.fb-n > a").attr("href")
+                    
+                    // Enhanced local image detection with priority order
+                    val posterPatterns = listOf(
+                        "poster.jpg", "poster.jpeg", "poster.png",
+                        "cover.jpg", "cover.jpeg", "cover.png", 
+                        "a_AL_.jpg", "a_AL_.jpeg", "a_AL_.png",
+                        "thumbnail.jpg", "thumbnail.jpeg", "thumbnail.png"
+                    )
+                    
+                    val imageExtensions = listOf(".jpg", ".jpeg", ".png", ".webp", ".bmp")
+                    
+                    // Check for exact poster filenames first
+                    if (posterPatterns.contains(filename)) {
+                        imageLink = mainUrl + href
+                    }
+                    // Then check for poster-like names
+                    else if ((filename.contains("poster") || filename.contains("cover")) && 
+                             imageExtensions.any { ext -> filename.endsWith(ext) }) {
+                        imageLink = mainUrl + href
+                    }
+                    // Finally any image file as fallback
+                    else if (imageExtensions.any { ext -> filename.endsWith(ext) }) {
+                        imageLink = mainUrl + href
+                    }
                 } else {
                     val folderHtml = it.select("td.fb-n > a")
                     val title = folderHtml.text()

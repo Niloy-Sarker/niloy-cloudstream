@@ -3,9 +3,13 @@ package com.niloy
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.SearchResponse
 import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.addDubStatus
 import com.lagradost.cloudstream3.app
+import com.lagradost.cloudstream3.newAnimeSearchResponse
 import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.utils.AppUtils
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.net.URLDecoder
@@ -43,10 +47,9 @@ object DhakaFlixUtils {
         val name = nameRegex.find(hrefDecoded)?.groups?.get(1)?.value
         return name.toString()
     }
-    
-    /**
-     * Common search implementation that can be used by all DhakaFlix providers
-     * @param api The MainAPI instance that will create the search responses
+      /**
+     * Fast search implementation optimized for performance
+     * Removes poster fetching during search for faster results
      */
     suspend fun doSearch(
         query: String, 
@@ -60,7 +63,7 @@ object DhakaFlixUtils {
         // Clean the query for better searching
         val cleanQuery = query.replace(Regex("[^a-zA-Z0-9 ]"), " ").trim()
         
-        // First try exact match search
+        // Single search request - don't do fallback searches for speed
         val body = 
             "{\"action\":\"get\",\"search\":{\"href\":\"/$serverName/\",\"pattern\":\"$cleanQuery\",\"ignorecase\":true}}".toRequestBody(
                 "application/json".toMediaType()
@@ -68,78 +71,118 @@ object DhakaFlixUtils {
         val doc = app.post("$mainUrl/$serverName/", requestBody = body).text
         val searchJson = AppUtils.parseJson<BdixDhakaFlix14Provider.SearchResult>(doc)
         
-        // Process direct matches
-        val directMatches = searchJson.search.take(30).filter { post -> post.size == null }
-        
-        if (directMatches.isNotEmpty()) {
-            directMatches.forEach { post -> 
-                val href = post.href
-                val url = mainUrl + href
-                val name = nameFromUrl(href)
-                val cleanName = cleanNameForSearch(name)
-                
-                // Try to find the poster
-                val posterUrl = findPosterFunc(url)
-                
-                // Create search response directly
-                val searchResult = api.newMovieSearchResponse(cleanName, url, TvType.Movie) {
-                    if (posterUrl?.isNotEmpty() == true) {
-                        this.posterUrl = posterUrl
-                    }
-                }
-                searchResponse.add(searchResult)
-            }
-        }
-        
-        // If insufficient results, try different search techniques
-        if (searchResponse.isEmpty() || searchResponse.size < 5) {
-            // Try searching with individual words for better results
-            val words = cleanQuery.split(" ").filter { it.length > 3 } // Only use words with more than 3 characters
-            
-            if (words.isNotEmpty()) {
-                // Try each significant word
-                for (word in words) {
-                    // Skip if we already have enough results
-                    if (searchResponse.size >= 15) break
-                    
-                    val wordBody =
-                        "{\"action\":\"get\",\"search\":{\"href\":\"/$serverName/\",\"pattern\":\"$word\",\"ignorecase\":true}}".toRequestBody(
-                            "application/json".toMediaType()
-                        )
-                    val wordDoc = app.post("$mainUrl/$serverName/", requestBody = wordBody).text
-                    val wordSearchJson = AppUtils.parseJson<BdixDhakaFlix14Provider.SearchResult>(wordDoc)
-                    
-                    // Calculate relevance by checking how many words from the query appear in the result
-                    wordSearchJson.search.filter { post -> 
-                        post.size == null && 
-                        searchResponse.none { it.url == mainUrl + post.href } // Avoid duplicates
-                    }.take(10).forEach { post -> 
+        // Process matches quickly without poster fetching
+        val matches = searchJson.search.take(40).filter { post -> post.size == null }        // Process matches with poster loading in batches for better performance
+        val batchSize = 6
+        val matchesWithPosters = coroutineScope {
+            matches.chunked(batchSize).flatMap { batch ->
+                batch.map { post ->
+                    async {
                         val href = post.href
                         val url = mainUrl + href
                         val name = nameFromUrl(href)
                         val cleanName = cleanNameForSearch(name)
                         
-                        // Only add if there's some relevant match
-                        val relevanceScore = calculateRelevance(cleanName, query)
-                        if (relevanceScore > 0.3) { // At least 30% relevance
-                            val posterUrl = findPosterFunc(url)
-                            
-                            // Create search response directly
-                            val searchResult = api.newMovieSearchResponse(cleanName, url, TvType.Movie) {
-                                if (posterUrl?.isNotEmpty() == true) {
-                                    this.posterUrl = posterUrl
-                                }
+                        // Get poster using the provided function
+                        val posterUrl = findPosterFunc(url)
+                        
+                        api.newAnimeSearchResponse(cleanName, url, TvType.Movie) {
+                            // Add poster if found
+                            if (posterUrl?.isNotEmpty() == true) {
+                                this.posterUrl = posterUrl
                             }
-                            searchResponse.add(searchResult)
+                            // Add dub status based on name content
+                            addDubStatus(
+                                dubExist = when {
+                                    "Dual" in name -> true
+                                    else -> false
+                                }, 
+                                subExist = when {
+                                    "ESub" in name -> true
+                                    else -> false
+                                }
+                            )
                         }
                     }
+                }.map { it.await() }
+            }
+        }
+          searchResponse.addAll(matchesWithPosters)
+        
+        // Skip fallback search if main search returned valid results
+        // Only use fallback if we have no results at all from the main search
+        if (searchResponse.isEmpty()) {
+            val words = cleanQuery.split(" ").filter { it.length > 3 }
+            if (words.isNotEmpty()) {
+                val fallbackQuery = words.first()
+                val fallbackBody =
+                    "{\"action\":\"get\",\"search\":{\"href\":\"/$serverName/\",\"pattern\":\"$fallbackQuery\",\"ignorecase\":true}}".toRequestBody(
+                        "application/json".toMediaType()
+                    )
+                val fallbackDoc = app.post("$mainUrl/$serverName/", requestBody = fallbackBody).text
+                val fallbackJson = AppUtils.parseJson<BdixDhakaFlix14Provider.SearchResult>(fallbackDoc)
+                  // Add relevant fallback results (limit to avoid too many results)
+                val fallbackMatches = fallbackJson.search.filter { post -> 
+                    post.size == null && 
+                    searchResponse.none { it.url == mainUrl + post.href } // Avoid duplicates
+                }.take(15).filter { post ->
+                    val href = post.href
+                    val name = nameFromUrl(href)
+                    val cleanName = cleanNameForSearch(name)
+                    
+                    // Quick relevance check
+                    cleanName.contains(cleanQuery, ignoreCase = true) || 
+                    cleanQuery.split(" ").any { word -> cleanName.contains(word, ignoreCase = true) && word.length > 2 }
                 }
+                
+                // Process fallback matches with poster loading
+                val fallbackWithPosters = coroutineScope {
+                    fallbackMatches.chunked(batchSize).flatMap { batch ->
+                        batch.map { post ->
+                            async {
+                                val href = post.href
+                                val url = mainUrl + href
+                                val name = nameFromUrl(href)
+                                val cleanName = cleanNameForSearch(name)
+                                
+                                // Get poster using the provided function
+                                val posterUrl = findPosterFunc(url)
+                                
+                                api.newAnimeSearchResponse(cleanName, url, TvType.Movie) {
+                                    // Add poster if found
+                                    if (posterUrl?.isNotEmpty() == true) {
+                                        this.posterUrl = posterUrl
+                                    }
+                                    // Add dub status based on name content
+                                    addDubStatus(
+                                        dubExist = when {
+                                            "Dual" in name -> true
+                                            else -> false
+                                        }, 
+                                        subExist = when {
+                                            "ESub" in name -> true
+                                            else -> false
+                                        }
+                                    )
+                                }
+                            }
+                        }.map { it.await() }
+                    }
+                }
+                
+                searchResponse.addAll(fallbackWithPosters)
             }
         }
         
-        // Sort results by relevance to the query
-        return searchResponse.sortedByDescending { 
-            calculateRelevance(cleanNameForSearch(it.name), query) 
+        // Simple sort by name relevance (faster than complex scoring)
+        return searchResponse.sortedByDescending { result ->
+            when {
+                result.name.contains(cleanQuery, ignoreCase = true) -> 3.0
+                cleanQuery.split(" ").count { word -> 
+                    result.name.contains(word, ignoreCase = true) && word.length > 2 
+                } > cleanQuery.split(" ").size / 2 -> 2.0
+                else -> 1.0
+            }
         }
     }
     
@@ -222,27 +265,71 @@ object DhakaFlixUtils {
         val exactOrderBonus = if (longestSequence == queryWords.size) 0.3 else 0.0
         
         return (finalScore + startBonus + exactOrderBonus).coerceIn(0.0, 1.0)
-    }
-    
-    /**
-     * Common poster finding implementation
+    }      /**
+     * Enhanced poster finding implementation that prioritizes local images
      */
     suspend fun findPoster(contentUrl: String, mainUrl: String): String? {
         try {
             val doc = app.get(contentUrl).document
-            // Look for common poster file names
-            val posterPatterns = listOf("a_AL_.jpg", "poster.jpg", "cover.jpg", ".jpg", ".png", ".jpeg")
             
-            // First check for specific poster filenames
+            // Priority-ordered list of poster patterns (most specific to general)
+            val posterPatterns = listOf(
+                "poster.jpg", "poster.jpeg", "poster.png",
+                "cover.jpg", "cover.jpeg", "cover.png", 
+                "a_AL_.jpg", "a_AL_.jpeg", "a_AL_.png",
+                "thumbnail.jpg", "thumbnail.jpeg", "thumbnail.png",
+                "fanart.jpg", "fanart.jpeg", "fanart.png"
+            )
+            
+            val imageExtensions = listOf(".jpg", ".jpeg", ".png", ".webp", ".bmp")
+            
+            // First pass: Look for exact poster filename matches (highest priority)
             doc.select("tbody > tr:gt(1)").forEach { row -> 
-                val filename = row.select("td.fb-n > a").text()
-                if (posterPatterns.any { pattern -> filename.contains(pattern, ignoreCase = true) }) {
-                    return mainUrl + row.select("td.fb-n > a").attr("href")
+                val filename = row.select("td.fb-n > a").text().lowercase()
+                for (pattern in posterPatterns) {
+                    if (filename == pattern) {
+                        return mainUrl + row.select("td.fb-n > a").attr("href")
+                    }
+                }
+            }
+            
+            // Second pass: Look for poster-like filenames (medium priority)
+            doc.select("tbody > tr:gt(1)").forEach { row -> 
+                val filename = row.select("td.fb-n > a").text().lowercase()
+                if (filename.contains("poster") || filename.contains("cover")) {
+                    for (ext in imageExtensions) {
+                        if (filename.endsWith(ext)) {
+                            return mainUrl + row.select("td.fb-n > a").attr("href")
+                        }
+                    }
+                }
+            }
+            
+            // Third pass: Look for any image files (lower priority)
+            doc.select("tbody > tr:gt(1)").forEach { row -> 
+                val filename = row.select("td.fb-n > a").text().lowercase()
+                for (ext in imageExtensions) {
+                    if (filename.endsWith(ext)) {
+                        return mainUrl + row.select("td.fb-n > a").attr("href")
+                    }
                 }
             }
         } catch (e: Exception) {
             // Silent fail if we can't load the document
         }
         return null
+    }
+      /**
+     * Lightweight poster finding optimized for search and main page
+     * Only makes HTTP requests for local posters, no TMDB API calls
+     */
+    suspend fun findPosterLight(contentUrl: String, mainUrl: String): String? {
+        return try {
+            // Quick local poster check - only one HTTP request per content URL
+            findPoster(contentUrl, mainUrl)
+        } catch (e: Exception) {
+            // Silent fail to avoid breaking search/main page performance
+            null
+        }
     }
 }
