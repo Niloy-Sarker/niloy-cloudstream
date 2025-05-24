@@ -123,9 +123,7 @@ open class BdixDhakaFlix14Provider : MainAPI() {
         "Animation Movies (1080p)/" to "Animation Movies",
         "English Movies (1080p)/($year) 1080p/" to "English Movies",
         "Hindi Movies/($year)/" to "Hindi Movies",
-        "IMDb Top-250 Movies/" to "IMDb Top-250 Movies",
-        "SOUTH INDIAN MOVIES/Hindi Dubbed/($year)/" to "Hindi Dubbed",
-        "SOUTH INDIAN MOVIES/South Movies/$year/" to "South Movies",
+        "SOUTH INDIAN MOVIES/Hindi Dubbed/($year)/" to "South Movies Hindi Dubbed",
         "/KOREAN TV %26 WEB Series/" to "Korean TV & WEB Series"
     )
 
