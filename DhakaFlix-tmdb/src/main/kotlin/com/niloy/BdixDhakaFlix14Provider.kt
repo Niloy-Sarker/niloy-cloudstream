@@ -96,7 +96,13 @@ open class BdixDhakaFlix14Provider : MainAPI() {
                 if (cache.size > 100) {
                     val currentTime = System.currentTimeMillis()
                     // Remove expired entries
-                    cache.entries.removeIf { (currentTime - it.value.second) > TMDB_CACHE_DURATION }
+                    val iterator = cache.entries.iterator()
+                    while (iterator.hasNext()) {
+                        val entry = iterator.next()
+                        if ((currentTime - entry.value.second) > TMDB_CACHE_DURATION) {
+                            iterator.remove()
+                        }
+                    }
                     // If still too large, remove oldest entries
                     if (cache.size > 50) {
                         val sortedEntries = cache.entries.sortedBy { it.value.second }
@@ -394,34 +400,38 @@ open class BdixDhakaFlix14Provider : MainAPI() {
         tmdbId: Int?
     ) = withContext(Dispatchers.IO) {
         val doc = app.get(url).document
-        var episodeNum = 0
         
         // If we have TMDB ID, fetch season details first
         val seasonDetails = if (tmdbId != null) {
             TmdbHelper.getSeasonDetails(tmdbId, seasonNum)
         } else null
         
-        // Get all episode links first
+        // Get all episode links and parse their episode numbers from filenames
         val episodes = doc.select("tbody > tr:gt(1)").mapNotNull {
             val folderHtml = it.select("td.fb-n > a")
             val name = folderHtml.text()
             val link = mainUrl + folderHtml.attr("href")
             
             if (!name.contains(Regex("\\.(jpg|jpeg|png)$", RegexOption.IGNORE_CASE))) {
-                episodeNum++
+                // Parse episode number from filename
+                val episodePattern = Regex("[Ss]\\d{1,2}[Ee](\\d{1,3})")
+                val episodeNum = episodePattern.find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                    ?: return@mapNotNull null // Skip if no episode number found
+                
                 Triple(name, link, episodeNum)
             } else null
-        }
+        }.sortedBy { it.third } // Sort by episode number
 
         // Process episodes in parallel
         val deferredEpisodes = episodes.map { (name, link, epNum) ->
             async {
-                val episodeDetails = seasonDetails?.episodes?.find { 
-                    it.episodeNumber == epNum && it.seasonNumber == seasonNum 
-                }
+                val episodeDetails = if (tmdbId != null) {
+                    // Pass filename to get correct episode details
+                    TmdbHelper.getEpisodeDetails(tmdbId, seasonNum, epNum, name)
+                } else null
                 
                 newEpisode(link) {
-                    this.name = episodeDetails?.name ?: name
+                    this.name = episodeDetails?.name ?: cleanEpisodeName(name)
                     this.season = seasonNum
                     this.episode = epNum
                     this.description = episodeDetails?.overview

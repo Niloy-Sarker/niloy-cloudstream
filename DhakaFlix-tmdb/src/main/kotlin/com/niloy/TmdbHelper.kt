@@ -198,10 +198,19 @@ object TmdbHelper {
         }
     }
 
+    // Helper function to parse episode number from filename
+    private fun parseEpisodeNumberFromFilename(filename: String): Int? {
+        // Match patterns like S01E00, S1E0, etc.
+        val episodePattern = Regex("[Ss](\\d{1,2})[Ee](\\d{1,3})")
+        val match = episodePattern.find(filename)
+        return match?.groupValues?.getOrNull(2)?.toIntOrNull()
+    }
+
     suspend fun getEpisodeDetails(
         tmdbId: Int,
         seasonNumber: Int,
-        episodeNumber: Int
+        episodeNumber: Int,
+        filename: String? = null
     ): TmdbEpisodeDetails? {
         val apiKey = getApiKey()
         if (apiKey.isEmpty()) {
@@ -209,8 +218,11 @@ object TmdbHelper {
             return null
         }
 
+        // Use episode number from filename if available, otherwise use provided episodeNumber
+        val actualEpisodeNumber = filename?.let { parseEpisodeNumberFromFilename(it) } ?: episodeNumber
+
         return try {
-            val url = "$TMDB_API/tv/$tmdbId/season/$seasonNumber/episode/$episodeNumber?api_key=$apiKey"
+            val url = "$TMDB_API/tv/$tmdbId/season/$seasonNumber/episode/$actualEpisodeNumber?api_key=$apiKey"
             val response = makeApiCall(url) ?: return null
             parseJson(response)
         } catch (e: Exception) {
