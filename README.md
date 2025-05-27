@@ -9,7 +9,7 @@ To install the DhakaFlix Cloudstream repository, follow these steps:
 1. Open the Cloudstream app on your device.
 2. Navigate to **Settings** → **Extensions**.
 3. Tap on **Add Repository**.
-4. Enter dhakaflixcs3 
+4. Enter **niloy-cs** 
 5. Tap **Add** to save the repository.
 6. Once added, you can browse and install the available extensions from the DhakaFlix repository.
 

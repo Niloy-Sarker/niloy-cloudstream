@@ -1,8 +1,8 @@
 {
-    "name": "DhakaFlix BDIX",
-    "description": "DhakaFlix BDIX",
+    "name": "BDIX Repo",
+    "description": "DhakaFlix and Dflix plugins for Cloudstream",
     "manifestVersion": 1,
     "pluginLists": [
-      "https://raw.githubusercontent.com/Niloy-Sarker/DhakaFlix_Cloudstream/builds/plugins.json"
+      "https://raw.githubusercontent.com/Niloy-Sarker/niloy-cloudstream/builds/plugins.json"
     ]
 }
