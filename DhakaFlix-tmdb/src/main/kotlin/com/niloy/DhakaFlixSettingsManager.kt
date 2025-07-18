@@ -8,9 +8,11 @@ import com.lagradost.cloudstream3.AcraApplication.Companion.context
 object DhakaFlixSettingsManager {
     private const val SETTINGS_PREF = "dhakaflix_settings"
     private const val API_KEY = "tmdb_api_key"
+    private const val TMDB_ENABLED = "tmdb_enabled"
     private const val TAG = "DhakaFlixSettings"
 
     private var cachedApiKey: String? = null
+    private var cachedTmdbEnabled: Boolean? = null
 
     private fun getPrefs(): SharedPreferences? {
         return try {
@@ -70,6 +72,43 @@ object DhakaFlixSettingsManager {
             cachedApiKey = null
         } catch (e: Exception) {
             Log.e(TAG, "Failed to clear API key: ${e.message}")
+        }
+    }
+
+    fun isTmdbEnabled(): Boolean {
+        // First try to get from cache
+        if (cachedTmdbEnabled != null) {
+            return cachedTmdbEnabled!!
+        }
+
+        return try {
+            // If not in cache, get from SharedPreferences (default to true)
+            val enabled = getPrefs()?.getBoolean(TMDB_ENABLED, true) ?: true
+            cachedTmdbEnabled = enabled // Cache the value
+            enabled
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting TMDB enabled state: ${e.message}")
+            true // Default to enabled if there's an error
+        }
+    }
+
+    fun setTmdbEnabled(enabled: Boolean): Boolean {
+        return try {
+            val prefs = getPrefs() ?: return false
+            
+            // Use commit() for synchronous write
+            val success = prefs.edit()
+                .putBoolean(TMDB_ENABLED, enabled)
+                .commit()
+
+            if (success) {
+                cachedTmdbEnabled = enabled // Update cache only on successful save
+            }
+
+            success
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save TMDB enabled state: ${e.message}")
+            false
         }
     }
 } 

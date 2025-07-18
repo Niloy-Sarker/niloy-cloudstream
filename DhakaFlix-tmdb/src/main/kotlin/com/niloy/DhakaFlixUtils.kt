@@ -47,7 +47,21 @@ object DhakaFlixUtils {
         val name = nameRegex.find(hrefDecoded)?.groups?.get(1)?.value
         return name.toString()
     }
-      /**
+      // Check if filename contains multi-audio indicators
+    private fun hasMultiAudio(filename: String): Boolean {
+        val multiAudioIndicators = listOf(
+            "dual", "multi", "hindi", "english", "tamil", "telugu", "malayalam", 
+            "kannada", "bengali", "urdu", "punjabi", "gujarati", "marathi",
+            "audio", "dubbed", "dub", "lang", "language", "multilang"
+        )
+        
+        val lowerFilename = filename.lowercase()
+        return multiAudioIndicators.any { indicator ->
+            lowerFilename.contains(indicator)
+        }
+    }
+
+    /**
      * Fast search implementation optimized for performance
      * Removes poster fetching during search for faster results
      */
@@ -91,12 +105,9 @@ object DhakaFlixUtils {
                             if (posterUrl?.isNotEmpty() == true) {
                                 this.posterUrl = posterUrl
                             }
-                            // Add dub status based on name content
+                            // Add dub status based on multi-audio detection
                             addDubStatus(
-                                dubExist = when {
-                                    "Dual" in name -> true
-                                    else -> false
-                                }, 
+                                dubExist = hasMultiAudio(name),
                                 subExist = when {
                                     "ESub" in name -> true
                                     else -> false
@@ -153,12 +164,9 @@ object DhakaFlixUtils {
                                     if (posterUrl?.isNotEmpty() == true) {
                                         this.posterUrl = posterUrl
                                     }
-                                    // Add dub status based on name content
+                                    // Add dub status based on multi-audio detection
                                     addDubStatus(
-                                        dubExist = when {
-                                            "Dual" in name -> true
-                                            else -> false
-                                        }, 
+                                        dubExist = hasMultiAudio(name),
                                         subExist = when {
                                             "ESub" in name -> true
                                             else -> false

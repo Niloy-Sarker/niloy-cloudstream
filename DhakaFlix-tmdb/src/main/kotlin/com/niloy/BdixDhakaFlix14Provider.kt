@@ -230,7 +230,7 @@ open class BdixDhakaFlix14Provider : MainAPI() {
         
         return newAnimeSearchResponse(name, url, TvType.Movie) {
             addDubStatus(
-                dubExist = "Dual" in rawName,  // Check dual audio in original name
+                dubExist = hasMultiAudio(rawName),  // Check for multi audio indicators
                 subExist = false
             )
             
@@ -252,6 +252,20 @@ open class BdixDhakaFlix14Provider : MainAPI() {
     // Use the common utility function for nameFromUrl
     protected fun nameFromUrl(href: String): String {
         return DhakaFlixUtils.nameFromUrl(href)
+    }
+
+    // Check if filename contains multi-audio indicators
+    private fun hasMultiAudio(filename: String): Boolean {
+        val multiAudioIndicators = listOf(
+            "dual", "multi", "hindi", "english", "tamil", "telugu", "malayalam", 
+            "kannada", "bengali", "urdu", "punjabi", "gujarati", "marathi",
+            "audio", "dubbed", "dub", "lang", "language", "multilang"
+        )
+        
+        val lowerFilename = filename.lowercase()
+        return multiAudioIndicators.any { indicator ->
+            lowerFilename.contains(indicator)
+        }
     }      // Update findPosterUrl to prioritize local images over TMDB
     suspend fun findPosterUrl(contentUrl: String): String? {
         val providerCache = getProviderCache(name)
@@ -343,15 +357,29 @@ open class BdixDhakaFlix14Provider : MainAPI() {
         
         if (isTvSeries) {
             val episodesData = mutableListOf<Episode>()
-            var seasonNum = 0
             
-            // Process episodes using original logic
+            // Process episodes using improved season logic
             doc.select("tbody > tr:gt(1)").forEach {
                 if (it.selectFirst("td.fb-i > img")?.attr("alt") == "folder") {
-                    seasonNum++
+                    val folderName = it.select("td.fb-n > a").text()
+                    val seasonInfo = parseSeasonInfo(folderName)
+                    
+                    val seasonNum: Int
+                    val seasonName: String?
+                    
+                    if (seasonInfo.first != null) {
+                        // Regular season with a number
+                        seasonNum = seasonInfo.first!!
+                        seasonName = null
+                    } else {
+                        // Special season (OVA, Specials, etc.) - use Season 0
+                        seasonNum = 0
+                        seasonName = seasonInfo.second
+                    }
+                    
                     link = mainUrl + it.select("td.fb-n > a").attr("href")
                     // Extract season data with TMDB ID for episode details
-                    seasonExtractor(link, episodesData, seasonNum, tmdbId)                } else if (imageLink.isEmpty()) {
+                    seasonExtractor(link, episodesData, seasonNum, tmdbId, seasonName)                } else if (imageLink.isEmpty()) {
                     val filename = it.select("td.fb-n > a").text().lowercase()
                     val href = it.select("td.fb-n > a").attr("href")
                     
@@ -435,11 +463,51 @@ open class BdixDhakaFlix14Provider : MainAPI() {
         }
     }
 
+    private fun parseSeasonInfo(folderName: String): Pair<Int?, String?> {
+        // Try to match common season patterns
+        val seasonPatterns = listOf(
+            Regex("(?i)season\\s*(\\d+)", RegexOption.IGNORE_CASE),
+            Regex("(?i)s(\\d+)", RegexOption.IGNORE_CASE),
+            Regex("(?i)series\\s*(\\d+)", RegexOption.IGNORE_CASE)
+        )
+        
+        for (pattern in seasonPatterns) {
+            val match = pattern.find(folderName)
+            if (match != null) {
+                val seasonNum = match.groupValues[1].toIntOrNull()
+                if (seasonNum != null) {
+                    return Pair(seasonNum, null) // Return season number, no custom name
+                }
+            }
+        }
+        
+        // If no season number found, use folder name as custom season name
+        // Clean up the folder name for display and normalize common special season names
+        val cleanName = folderName.replace(Regex("[%_]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .let { name ->
+                // Normalize common special season names
+                when (name.lowercase()) {
+                    "oav", "oavs" -> "OAV"
+                    "ova", "ovas" -> "OVA"
+                    "special", "specials" -> "Specials"
+                    "movie", "movies" -> "Movies"
+                    "extra", "extras" -> "Extras"
+                    "bonus" -> "Bonus"
+                    else -> name
+                }
+            }
+        
+        return Pair(null, cleanName) // Return null for season number, custom name
+    }
+
     private suspend fun seasonExtractor(
         url: String, 
         episodesData: MutableList<Episode>, 
         seasonNum: Int,
-        tmdbId: Int?
+        tmdbId: Int?,
+        seasonName: String? = null
     ) = withContext(Dispatchers.IO) {
         val doc = app.get(url).document
         
@@ -455,17 +523,32 @@ open class BdixDhakaFlix14Provider : MainAPI() {
             val link = mainUrl + folderHtml.attr("href")
             
             if (!name.contains(Regex("\\.(jpg|jpeg|png)$", RegexOption.IGNORE_CASE))) {
-                // Parse episode number from filename
+                // Try to parse episode number from filename
                 val episodePattern = Regex("[Ss]\\d{1,2}[Ee](\\d{1,3})")
                 val episodeNum = episodePattern.find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
-                    ?: return@mapNotNull null // Skip if no episode number found
                 
-                Triple(name, link, episodeNum)
+                // If no episode number found and this is a special season, use sequential numbering
+                val finalEpisodeNum = if (episodeNum == null && seasonName != null) {
+                    // For special seasons, use sequential numbering starting from 1
+                    null // We'll handle this later
+                } else {
+                    episodeNum
+                }
+                
+                Triple(name, link, finalEpisodeNum)
             } else null
-        }.sortedBy { it.third } // Sort by episode number
+        }
+        
+        // Sort episodes - those with episode numbers first, then others
+        val sortedEpisodes = episodes.sortedWith(compareBy<Triple<String, String, Int?>> { it.third == null }.thenBy { it.third })
+        
+        // Assign episode numbers to episodes that don't have them
+        val finalEpisodes = sortedEpisodes.mapIndexed { index, (name, link, epNum) ->
+            Triple(name, link, epNum ?: (index + 1))
+        }
 
         // Process episodes in parallel
-        val deferredEpisodes = episodes.map { (name, link, epNum) ->
+        val deferredEpisodes = finalEpisodes.map { (name, link, epNum) ->
             async {
                 val episodeDetails = if (tmdbId != null) {
                     // Pass filename to get correct episode details
@@ -473,10 +556,25 @@ open class BdixDhakaFlix14Provider : MainAPI() {
                 } else null
                 
                 newEpisode(link) {
-                    this.name = episodeDetails?.name ?: cleanEpisodeName(name)
+                    val baseName = episodeDetails?.name ?: cleanEpisodeName(name)
+                    // For special seasons, use a clear naming format
+                    this.name = if (seasonName != null) {
+                        "🎬 $seasonName - $baseName"
+                    } else {
+                        baseName
+                    }
                     this.season = seasonNum
                     this.episode = epNum
-                    this.description = episodeDetails?.overview
+                    this.description = if (seasonName != null) {
+                        val seasonDesc = "📁 $seasonName Collection"
+                        if (episodeDetails?.overview?.isNotEmpty() == true) {
+                            "$seasonDesc\n\n${episodeDetails.overview}"
+                        } else {
+                            seasonDesc
+                        }
+                    } else {
+                        episodeDetails?.overview
+                    }
                     episodeDetails?.rating?.let { rating ->
                         this.rating = (rating * 10).toInt()
                     }

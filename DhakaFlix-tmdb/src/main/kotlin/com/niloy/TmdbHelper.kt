@@ -150,6 +150,12 @@ object TmdbHelper {
     }
 
     suspend fun searchTmdb(title: String, isMovie: Boolean = true): TmdbSearchResult? {
+        // Check if TMDB is enabled first
+        if (!DhakaFlixSettingsManager.isTmdbEnabled()) {
+            Log.d(TAG, "TMDB integration is disabled, skipping search")
+            return null
+        }
+        
         val apiKey = getApiKey()
         if (apiKey.isEmpty()) {
             Log.d(TAG, "No API key set, skipping TMDB search")
@@ -180,6 +186,12 @@ object TmdbHelper {
     }
 
     suspend fun getTmdbDetails(id: Int, isMovie: Boolean = true): TmdbDetails? {
+        // Check if TMDB is enabled first
+        if (!DhakaFlixSettingsManager.isTmdbEnabled()) {
+            Log.d(TAG, "TMDB integration is disabled, skipping details")
+            return null
+        }
+        
         val apiKey = getApiKey()
         if (apiKey.isEmpty()) {
             Log.d(TAG, "No API key set, skipping TMDB details")
@@ -212,6 +224,12 @@ object TmdbHelper {
         episodeNumber: Int,
         filename: String? = null
     ): TmdbEpisodeDetails? {
+        // Check if TMDB is enabled first
+        if (!DhakaFlixSettingsManager.isTmdbEnabled()) {
+            Log.d(TAG, "TMDB integration is disabled, skipping episode details")
+            return null
+        }
+        
         val apiKey = getApiKey()
         if (apiKey.isEmpty()) {
             Log.d(TAG, "No API key set, skipping episode details")
@@ -235,6 +253,12 @@ object TmdbHelper {
         tmdbId: Int,
         seasonNumber: Int
     ): TmdbSeasonDetails? {
+        // Check if TMDB is enabled first
+        if (!DhakaFlixSettingsManager.isTmdbEnabled()) {
+            Log.d(TAG, "TMDB integration is disabled, skipping season details")
+            return null
+        }
+        
         val apiKey = getApiKey()
         if (apiKey.isEmpty()) {
             Log.d(TAG, "No API key set, skipping season details")
