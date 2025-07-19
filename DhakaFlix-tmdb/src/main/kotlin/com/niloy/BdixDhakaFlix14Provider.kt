@@ -35,7 +35,7 @@ open class BdixDhakaFlix14Provider : MainAPI() {
     override val instantLinkLoading = true
     override var lang = "bn"
     override val supportedTypes = setOf(
-        TvType.Movie, TvType.AnimeMovie, TvType.TvSeries
+        TvType.Movie, TvType.AnimeMovie, TvType.TvSeries, TvType.Anime
     )
 
     init {
@@ -50,6 +50,7 @@ open class BdixDhakaFlix14Provider : MainAPI() {
 
     open val year = 2025
     open val tvSeriesKeyword: List<String>? = listOf("KOREAN%20TV%20%26%20WEB%20Series")
+    open val animeKeyword: List<String>? = listOf("Anime%20%26%20Cartoon%20TV%20Series")
     open val serverName: String = "DHAKA-FLIX-14"    // Simple cache implementation with optimized settings
     companion object {
         private val caches = mutableMapOf<String, ProviderCache>()
@@ -124,7 +125,8 @@ open class BdixDhakaFlix14Provider : MainAPI() {
         "English Movies (1080p)/($year) 1080p/" to "English Movies",
         "Hindi Movies/($year)/" to "Hindi Movies",
         "SOUTH INDIAN MOVIES/Hindi Dubbed/($year)/" to "South Movies Hindi Dubbed",
-        "/KOREAN TV %26 WEB Series/" to "Korean TV & WEB Series"
+        "/KOREAN TV %26 WEB Series/" to "Korean TV & WEB Series",
+        "/Anime %26 Cartoon TV Series/" to "Anime & Cartoon TV Series"
     )
 
     // Number of items to load per page
@@ -216,9 +218,19 @@ open class BdixDhakaFlix14Provider : MainAPI() {
         val name = cleanNameForSearch(rawName)  // Use the same cleaning logic as search
         val url = mainUrl + folderHtml.attr("href")
         
+        // Determine content type based on URL
+        val tvType = when {
+            isAnime(url) -> {
+                // If it's anime, check if it's a series or movie
+                if (containsAnyLoop(url, tvSeriesKeyword)) TvType.Anime else TvType.AnimeMovie
+            }
+            containsAnyLoop(url, tvSeriesKeyword) -> TvType.TvSeries
+            else -> TvType.Movie
+        }
+        
         // Only load TMDB data if specifically requested
         val tmdbData = if (loadTmdbData) {
-            lazyLoadTmdbData(name, isMovie = !containsAnyLoop(url, tvSeriesKeyword))
+            lazyLoadTmdbData(name, isMovie = tvType == TvType.Movie || tvType == TvType.AnimeMovie)
         } else null
         
         // Load local posters if requested (lightweight operation)
@@ -228,7 +240,7 @@ open class BdixDhakaFlix14Provider : MainAPI() {
             else -> null // No poster loading
         }
         
-        return newAnimeSearchResponse(name, url, TvType.Movie) {
+        return newAnimeSearchResponse(name, url, tvType) {
             addDubStatus(
                 dubExist = hasMultiAudio(rawName),  // Check for multi audio indicators
                 subExist = false
@@ -327,8 +339,13 @@ open class BdixDhakaFlix14Provider : MainAPI() {
             .let { URLDecoder.decode(it, StandardCharsets.UTF_8.toString()) }
             .replace(Regex("\\[.*?\\]"), "")
             .trim()
+        
+        // Determine if this is a TV series, anime, or movie based on URL
+        val isAnimeContent = isAnime(url)
+        val isTvSeries = containsAnyLoop(url, tvSeriesKeyword)
+        
           // Load TMDB data with details since this is a detail view
-        val tmdbData = lazyLoadTmdbData(name, !containsAnyLoop(url, tvSeriesKeyword), loadDetails = true)
+        val tmdbData = lazyLoadTmdbData(name, isMovie = !(isTvSeries || isAnimeContent), loadDetails = true)
         
         // Priority 1: Try to get local poster from content folder first
         imageLink = findPosterUrl(url) ?: ""
@@ -352,10 +369,7 @@ open class BdixDhakaFlix14Provider : MainAPI() {
             year = extractYear(name)
         }
 
-        // Determine if this is a TV series or a movie based on URL
-        val isTvSeries = containsAnyLoop(url, tvSeriesKeyword)
-        
-        if (isTvSeries) {
+        if (isTvSeries || isAnimeContent) {
             val episodesData = mutableListOf<Episode>()
             
             // Process episodes using improved season logic
@@ -436,7 +450,9 @@ open class BdixDhakaFlix14Provider : MainAPI() {
                 }
             }
             
-            newTvSeriesLoadResponse(name, url, TvType.TvSeries, episodesData) {
+            val tvType = if (isAnimeContent) TvType.Anime else TvType.TvSeries
+            
+            newTvSeriesLoadResponse(name, url, tvType, episodesData) {
                 this.posterUrl = imageLink
                 this.plot = plot
                 this.rating = rating
@@ -454,7 +470,9 @@ open class BdixDhakaFlix14Provider : MainAPI() {
                 }
             }
             
-            newMovieLoadResponse(name, url, TvType.Movie, link) {
+            val movieType = if (isAnimeContent) TvType.AnimeMovie else TvType.Movie
+            
+            newMovieLoadResponse(name, url, movieType, link) {
                 this.posterUrl = imageLink
                 this.plot = plot
                 this.rating = rating
@@ -619,6 +637,10 @@ open class BdixDhakaFlix14Provider : MainAPI() {
             }
         }
         return false // Return false if no match is found after checking all keywords
+    }
+
+    private fun isAnime(url: String): Boolean {
+        return containsAnyLoop(url, animeKeyword)
     }
 
     override suspend fun loadLinks(
