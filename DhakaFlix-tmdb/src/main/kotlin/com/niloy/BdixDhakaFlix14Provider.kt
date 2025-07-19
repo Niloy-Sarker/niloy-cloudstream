@@ -70,11 +70,13 @@ open class BdixDhakaFlix14Provider : MainAPI() {
         private val searchCache = Collections.synchronizedMap(mutableMapOf<String, Pair<TmdbSearchResult?, Long>>())
         private val tmdbDetailsCache = Collections.synchronizedMap(mutableMapOf<String, Pair<TmdbDetails?, Long>>())
         private val seasonDetailsCache = Collections.synchronizedMap(mutableMapOf<String, Pair<TmdbSeasonDetails?, Long>>())
+        private val bulkSeasonCache = Collections.synchronizedMap(mutableMapOf<String, Pair<Map<Int, TmdbSeasonDetails?>, Long>>())
 
         fun getPosterCache(): MutableMap<String, Pair<String?, Long>> = posterCache
         fun getSearchCache(): MutableMap<String, Pair<TmdbSearchResult?, Long>> = searchCache
         fun getTmdbDetailsCache(): MutableMap<String, Pair<TmdbDetails?, Long>> = tmdbDetailsCache
         fun getSeasonDetailsCache(): MutableMap<String, Pair<TmdbSeasonDetails?, Long>> = seasonDetailsCache
+        fun getBulkSeasonCache(): MutableMap<String, Pair<Map<Int, TmdbSeasonDetails?>, Long>> = bulkSeasonCache
 
         fun <T> getFromCache(
             cache: MutableMap<String, Pair<T?, Long>>,
@@ -116,6 +118,7 @@ open class BdixDhakaFlix14Provider : MainAPI() {
                 getSearchCache().clear()
                 getTmdbDetailsCache().clear()
                 getSeasonDetailsCache().clear()
+                getBulkSeasonCache().clear()
             }
         }
     }
@@ -161,6 +164,35 @@ open class BdixDhakaFlix14Provider : MainAPI() {
         val result = TmdbHelper.searchTmdb(cleanName, isMovie)
         providerCache.addToCache(providerCache.getSearchCache(), cacheKey, result)
         return@coroutineScope result
+    }
+
+    // Bulk load all TMDB data for a TV series to minimize API calls
+    private suspend fun bulkLoadTvSeriesData(
+        tmdbId: Int,
+        seasonNumbers: List<Int>
+    ): Map<Int, TmdbSeasonDetails?> = coroutineScope {
+        val providerCache = getProviderCache(this@BdixDhakaFlix14Provider.name)
+        val cacheKey = "$tmdbId:${seasonNumbers.sorted().joinToString(",")}"
+        
+        // First check cache
+        val cachedData = providerCache.getBulkSeasonCache()[cacheKey]
+        if (cachedData != null && (System.currentTimeMillis() - cachedData.second) < TMDB_CACHE_DURATION) {
+            return@coroutineScope cachedData.first
+        }
+        
+        // Load all season data in one optimized call
+        val seasonData = TmdbHelper.getAllSeasonDetails(tmdbId, seasonNumbers)
+        
+        // Cache the bulk data
+        providerCache.getBulkSeasonCache()[cacheKey] = Pair(seasonData, System.currentTimeMillis())
+        
+        // Also cache individual seasons for faster access
+        seasonData.forEach { (seasonNum, seasonDetails) ->
+            val individualCacheKey = "$tmdbId:$seasonNum"
+            providerCache.getSeasonDetailsCache()[individualCacheKey] = Pair(seasonDetails, System.currentTimeMillis())
+        }
+        
+        return@coroutineScope seasonData
     }
 
     override suspend fun getMainPage(
@@ -371,29 +403,30 @@ open class BdixDhakaFlix14Provider : MainAPI() {
 
         if (isTvSeries || isAnimeContent) {
             val episodesData = mutableListOf<Episode>()
+            val seasonNumbers = mutableListOf<Int>()
+            val seasonFolders = mutableListOf<Triple<String, String, Pair<Int?, String?>>>()
             
-            // Process episodes using improved season logic
+            // First pass: collect all season information without making TMDB calls
             doc.select("tbody > tr:gt(1)").forEach {
                 if (it.selectFirst("td.fb-i > img")?.attr("alt") == "folder") {
                     val folderName = it.select("td.fb-n > a").text()
                     val seasonInfo = parseSeasonInfo(folderName)
+                    val link = mainUrl + it.select("td.fb-n > a").attr("href")
                     
                     val seasonNum: Int
                     val seasonName: String?
                     
                     if (seasonInfo.first != null) {
-                        // Regular season with a number
                         seasonNum = seasonInfo.first!!
                         seasonName = null
                     } else {
-                        // Special season (OVA, Specials, etc.) - use Season 0
-                        seasonNum = 0
+                        seasonNum = 0 // Special season
                         seasonName = seasonInfo.second
                     }
                     
-                    link = mainUrl + it.select("td.fb-n > a").attr("href")
-                    // Extract season data with TMDB ID for episode details
-                    seasonExtractor(link, episodesData, seasonNum, tmdbId, seasonName)                } else if (imageLink.isEmpty()) {
+                    seasonNumbers.add(seasonNum)
+                    seasonFolders.add(Triple(link, folderName, Pair(seasonNum, seasonName)))
+                } else if (imageLink.isEmpty()) {
                     val filename = it.select("td.fb-n > a").text().lowercase()
                     val href = it.select("td.fb-n > a").attr("href")
                     
@@ -426,26 +459,50 @@ open class BdixDhakaFlix14Provider : MainAPI() {
                     val link2 = mainUrl + folderHtml.attr("href")
                     if (!title.contains(Regex("\\.(jpg|jpeg|png)$", RegexOption.IGNORE_CASE))) {
                         val episodeNum = episodesData.size + 1
-                        // Try to get episode details from TMDB
-                        val episodeDetails = if (tmdbId != null) {
-                            TmdbHelper.getEpisodeDetails(tmdbId, 1, episodeNum)
-                        } else null
-                        
+                        // For single season shows, we'll handle TMDB data after bulk loading
                         episodesData.add(
                             newEpisode(link2) {
-                                this.name = episodeDetails?.name ?: title
+                                this.name = title // Will be updated with TMDB data later
                                 this.season = 1
                                 this.episode = episodeNum
-                                this.description = episodeDetails?.overview
-                                episodeDetails?.rating?.let { rating ->
-                                    this.rating = (rating * 10).toInt()
-                                }
-                                episodeDetails?.stillPath?.let { still ->
-                                    // Use small size for episode stills initially
-                                    this.posterUrl = TmdbHelper.getStillUrl(still)
-                                }
+                                // Description and other details will be added after bulk TMDB load
                             }
                         )
+                    }
+                }
+            }
+            
+            // Bulk load all TMDB season data if we have a TMDB ID and seasons
+            val bulkSeasonData = if (tmdbId != null && seasonNumbers.isNotEmpty()) {
+                bulkLoadTvSeriesData(tmdbId, seasonNumbers.distinct())
+            } else emptyMap()
+            
+            // Second pass: process seasons with bulk-loaded TMDB data
+            seasonFolders.forEach { (link, folderName, seasonInfo) ->
+                val (seasonNum, seasonName) = seasonInfo
+                val seasonData = if (seasonNum != null) bulkSeasonData[seasonNum] else null
+                
+                // Extract season data with pre-loaded TMDB data
+                seasonExtractorOptimized(link, episodesData, seasonNum ?: 0, seasonData, seasonName)
+            }
+            
+            // For single season shows, update episodes with TMDB data
+            if (seasonFolders.isEmpty() && episodesData.isNotEmpty() && tmdbId != null) {
+                val seasonData = bulkSeasonData[1] // Season 1 for single season shows
+                episodesData.forEachIndexed { index, episode ->
+                    val episodeDetails = TmdbHelper.getEpisodeFromSeasonData(seasonData, index + 1)
+                    // Update episode with TMDB data if available
+                    episodesData[index] = newEpisode(episode.data) {
+                        this.name = episodeDetails?.name ?: episode.name
+                        this.season = 1
+                        this.episode = index + 1
+                        this.description = episodeDetails?.overview
+                        episodeDetails?.rating?.let { rating ->
+                            this.rating = (rating * 10).toInt()
+                        }
+                        episodeDetails?.stillPath?.let { still ->
+                            this.posterUrl = TmdbHelper.getStillUrl(still)
+                        }
                     }
                 }
             }
@@ -606,6 +663,86 @@ open class BdixDhakaFlix14Provider : MainAPI() {
 
         // Wait for all episodes to be processed and add them to episodesData
         episodesData.addAll(deferredEpisodes.awaitAll())
+    }
+
+    // Optimized season extractor that uses pre-loaded TMDB data
+    private suspend fun seasonExtractorOptimized(
+        url: String, 
+        episodesData: MutableList<Episode>, 
+        seasonNum: Int,
+        seasonData: TmdbSeasonDetails?,
+        seasonName: String? = null
+    ) = withContext(Dispatchers.IO) {
+        val doc = app.get(url).document
+        
+        // Get all episode links and parse their episode numbers from filenames
+        val episodes = doc.select("tbody > tr:gt(1)").mapNotNull {
+            val folderHtml = it.select("td.fb-n > a")
+            val name = folderHtml.text()
+            val link = mainUrl + folderHtml.attr("href")
+            
+            if (!name.contains(Regex("\\.(jpg|jpeg|png)$", RegexOption.IGNORE_CASE))) {
+                // Try to parse episode number from filename
+                val episodePattern = Regex("[Ss]\\d{1,2}[Ee](\\d{1,3})")
+                val episodeNum = episodePattern.find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
+                
+                // If no episode number found and this is a special season, use sequential numbering
+                val finalEpisodeNum = if (episodeNum == null && seasonName != null) {
+                    // For special seasons, use sequential numbering starting from 1
+                    null // We'll handle this later
+                } else {
+                    episodeNum
+                }
+                
+                Triple(name, link, finalEpisodeNum)
+            } else null
+        }
+        
+        // Sort episodes - those with episode numbers first, then others
+        val sortedEpisodes = episodes.sortedWith(compareBy<Triple<String, String, Int?>> { it.third == null }.thenBy { it.third })
+        
+        // Assign episode numbers to episodes that don't have them
+        val finalEpisodes = sortedEpisodes.mapIndexed { index, (name, link, epNum) ->
+            Triple(name, link, epNum ?: (index + 1))
+        }
+
+        // Process episodes using pre-loaded TMDB data (much faster!)
+        val newEpisodes = finalEpisodes.map { (name, link, epNum) ->
+            // Get episode details from pre-loaded season data
+            val episodeDetails = TmdbHelper.getEpisodeFromSeasonData(seasonData, epNum)
+            
+            newEpisode(link) {
+                val baseName = episodeDetails?.name ?: cleanEpisodeName(name)
+                // For special seasons, use a clear naming format
+                this.name = if (seasonName != null) {
+                    "🎬 $seasonName - $baseName"
+                } else {
+                    baseName
+                }
+                this.season = seasonNum
+                this.episode = epNum
+                this.description = if (seasonName != null) {
+                    val seasonDesc = "📁 $seasonName Collection"
+                    if (episodeDetails?.overview?.isNotEmpty() == true) {
+                        "$seasonDesc\n\n${episodeDetails.overview}"
+                    } else {
+                        seasonDesc
+                    }
+                } else {
+                    episodeDetails?.overview
+                }
+                episodeDetails?.rating?.let { rating ->
+                    this.rating = (rating * 10).toInt()
+                }
+                episodeDetails?.stillPath?.let { still ->
+                    // Use small size for episode stills initially
+                    this.posterUrl = TmdbHelper.getStillUrl(still)
+                }
+            }
+        }
+
+        // Add all episodes to episodesData
+        episodesData.addAll(newEpisodes)
     }
 
     private fun extractYear(name: String): Int? {

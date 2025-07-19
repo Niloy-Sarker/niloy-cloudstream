@@ -6,6 +6,7 @@ import com.lagradost.cloudstream3.utils.AppUtils.parseJson
 import android.util.Log
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import kotlinx.coroutines.*
 
 // TMDB Data Classes
 data class TmdbSearchResponse(
@@ -273,6 +274,46 @@ object TmdbHelper {
             Log.e(TAG, "Error getting season details: ${e.message}")
             null
         }
+    }
+
+    // Bulk load all season details for a TV show
+    suspend fun getAllSeasonDetails(
+        tmdbId: Int,
+        seasonNumbers: List<Int>
+    ): Map<Int, TmdbSeasonDetails?> = coroutineScope {
+        if (!DhakaFlixSettingsManager.isTmdbEnabled()) {
+            Log.d(TAG, "TMDB integration is disabled, skipping bulk season details")
+            return@coroutineScope emptyMap()
+        }
+        
+        val apiKey = getApiKey()
+        if (apiKey.isEmpty()) {
+            Log.d(TAG, "No API key set, skipping bulk season details")
+            return@coroutineScope emptyMap()
+        }
+
+        val results = mutableMapOf<Int, TmdbSeasonDetails?>()
+        
+        // Process seasons in batches to avoid overwhelming the API
+        seasonNumbers.chunked(3).forEach { batch ->
+            val batchResults = batch.map { seasonNumber ->
+                async {
+                    seasonNumber to getSeasonDetails(tmdbId, seasonNumber)
+                }
+            }.awaitAll().toMap()
+            
+            results.putAll(batchResults)
+        }
+        
+        return@coroutineScope results
+    }
+
+    // Get a specific episode from cached season data
+    fun getEpisodeFromSeasonData(
+        seasonData: TmdbSeasonDetails?,
+        episodeNumber: Int
+    ): TmdbEpisodeDetails? {
+        return seasonData?.episodes?.find { it.episodeNumber == episodeNumber }
     }
 
     private fun String.encodeUrl(): String {
