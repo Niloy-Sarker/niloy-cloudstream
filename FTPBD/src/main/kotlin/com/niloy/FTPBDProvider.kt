@@ -333,12 +333,18 @@ class FTPBDProvider : MainAPI() {
                     }
                 }
                 "Series" -> {
+                    // Check if the series has anime/animation genres
+                    val isAnime = item.genres?.any { genre ->
+                        genre.lowercase().contains("anime") || genre.lowercase().contains("animation")
+                    } ?: false
+                    
+                    val tvType = if (isAnime) TvType.Anime else TvType.TvSeries
                     val episodes = getSeriesEpisodes(itemId)
                     
                     newTvSeriesLoadResponse(
                         item.name,
                         url,
-                        TvType.TvSeries,
+                        tvType,
                         episodes
                     ) {
                         this.year = item.productionYear
@@ -488,10 +494,17 @@ class FTPBDProvider : MainAPI() {
                 }
             }
             "Series" -> {
+                // Check if the series has anime/animation genres
+                val isAnime = this.genres?.any { genre ->
+                    genre.lowercase().contains("anime") || genre.lowercase().contains("animation")
+                } ?: false
+                
+                val tvType = if (isAnime) TvType.Anime else TvType.TvSeries
+                
                 newTvSeriesSearchResponse(
                     this.name,
                     "$mainUrl/item/${this.id}",
-                    TvType.TvSeries
+                    tvType
                 ) {
                     this.year = this@toSearchResponse.productionYear
                     this.posterUrl = getImageUrl(this@toSearchResponse.id, "Primary")
