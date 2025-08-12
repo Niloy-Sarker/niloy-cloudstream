@@ -70,7 +70,9 @@ class DflixSeriesProvider : MainAPI() { // all providers must be an instance of 
     private fun toResult(post: Element): SearchResponse {
         val url = mainUrl + (post.selectFirst("div > a:nth-child(1)")?.attr("href") ?: "")
         val title = post.select("div.fcard > div:nth-child(2) > div:nth-child(1)").text()
-        return newMovieSearchResponse(title, url, TvType.Movie) {
+        val genreText = post.select(".ganre-wrapper > a").joinToString(",") { it.text().lowercase() }
+        val type = if (genreText.contains("animation")) TvType.Anime else TvType.TvSeries
+        return newMovieSearchResponse(title, url, type) {
             this.posterUrl = post.selectFirst("img:nth-child(1)")?.attr("src")
         }
     }
@@ -78,7 +80,9 @@ class DflixSeriesProvider : MainAPI() { // all providers must be an instance of 
     private fun toSearchResult(post: Element): SearchResponse {
         val url = mainUrl + (post.selectFirst("a")?.attr("href") ?: "")
         val title = post.select("div.searchtitle").text()
-        return newMovieSearchResponse(title, url, TvType.Movie) {
+        val genreText = post.select(".ganre-wrapper > a").joinToString(",") { it.text().lowercase() }
+        val type = if (genreText.contains("animation")) TvType.Anime else TvType.TvSeries
+        return newMovieSearchResponse(title, url, type) {
             this.posterUrl = post.selectFirst("img:nth-child(1)")?.attr("src")
         }
     }
@@ -110,10 +114,14 @@ class DflixSeriesProvider : MainAPI() { // all providers must be an instance of 
                 extractedSeason(seasonNum, season, episodesData)
             }
 
-        return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodesData) {
+        val tags = doc.select(".ganre-wrapper > a").map { it.text().trim(',') }
+        val isAnime = tags.any { it.contains("Animation", ignoreCase = true) }
+        val type = if (isAnime) TvType.Anime else TvType.TvSeries
+        
+        return newTvSeriesLoadResponse(title, url, type, episodesData) {
             this.posterUrl = img
             this.plot = doc.select(".storyline").text()
-            this.tags = doc.select(".ganre-wrapper > a").map { it.text() }
+            this.tags = tags
             this.actors = doc.select("div.col-lg-2").map { actor(it) }
         }
     }
