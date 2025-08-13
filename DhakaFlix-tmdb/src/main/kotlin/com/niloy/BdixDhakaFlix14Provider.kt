@@ -366,11 +366,10 @@ open class BdixDhakaFlix14Provider : MainAPI() {
         var year: Int? = null
         var tmdbId: Int? = null
         
-        // Get name from URL
+        // Get name from URL and apply clean naming function
         name = url.split("/").filter { it.isNotEmpty() }.last()
             .let { URLDecoder.decode(it, StandardCharsets.UTF_8.toString()) }
-            .replace(Regex("\\[.*?\\]"), "")
-            .trim()
+            .let { cleanNameForSearch(it) }  // Apply the same cleaning logic as search and other functions
         
         // Determine if this is a TV series, anime, or movie based on URL
         val isAnimeContent = isAnime(url)
