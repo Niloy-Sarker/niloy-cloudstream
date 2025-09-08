@@ -9,6 +9,10 @@ import com.lagradost.cloudstream3.utils.Qualities
 import kotlinx.coroutines.delay
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
+import android.content.Context
+import android.content.Intent
+import android.content.SharedPreferences
+import com.lagradost.cloudstream3.AcraApplication.Companion.context
 
 class FTPBDProvider : MainAPI() {
     override var mainUrl = "http://media.ftpbd.net:8096"
@@ -28,6 +32,17 @@ class FTPBDProvider : MainAPI() {
         TvType.Others,
         TvType.Documentary
     )
+
+    companion object {
+        // Static reference to clear auth cache
+        private var accessToken: String? = null
+        private var userId: String? = null
+        
+        fun clearAuthCache() {
+            accessToken = null
+            userId = null
+        }
+    }
 
     // Emby API Data Classes
     data class EmbySearchResult(
@@ -100,18 +115,59 @@ class FTPBDProvider : MainAPI() {
         @JsonProperty("Name") val name: String = ""
     )
 
-    // Authentication variables
-    private var accessToken: String? = null
-    private var userId: String? = null
+    // Authentication variables - moved to companion object for static access
+    // private var accessToken: String? = null
+    // private var userId: String? = null
+
+    private fun getStoredCredentials(): Pair<String, String> {
+        return try {
+            val appContext = context
+            if (appContext == null) {
+                println("Context is null, using default credentials")
+                return Pair(FTPBDSettingsDialog.DEFAULT_USERNAME, FTPBDSettingsDialog.DEFAULT_PASSWORD)
+            }
+            
+            val sharedPreferences = appContext.getSharedPreferences(
+                FTPBDSettingsDialog.PREF_NAME, 
+                Context.MODE_PRIVATE
+            )
+            
+            val isLoggedIn = sharedPreferences.getBoolean(FTPBDSettingsDialog.KEY_IS_LOGGED_IN, false)
+            
+            if (isLoggedIn) {
+                val username = sharedPreferences.getString(
+                    FTPBDSettingsDialog.KEY_USERNAME, 
+                    FTPBDSettingsDialog.DEFAULT_USERNAME
+                ) ?: FTPBDSettingsDialog.DEFAULT_USERNAME
+                
+                val password = sharedPreferences.getString(
+                    FTPBDSettingsDialog.KEY_PASSWORD, 
+                    FTPBDSettingsDialog.DEFAULT_PASSWORD
+                ) ?: FTPBDSettingsDialog.DEFAULT_PASSWORD
+                
+                Pair(username, password)
+            } else {
+                // Use default credentials if not logged in
+                Pair(FTPBDSettingsDialog.DEFAULT_USERNAME, FTPBDSettingsDialog.DEFAULT_PASSWORD)
+            }
+        } catch (e: Exception) {
+            println("Error getting stored credentials: ${e.message}")
+            // Fallback to default credentials
+            Pair(FTPBDSettingsDialog.DEFAULT_USERNAME, FTPBDSettingsDialog.DEFAULT_PASSWORD)
+        }
+    }
 
     private suspend fun authenticate() {
         if (accessToken == null) {
             try {
                 println("Attempting to authenticate...")
+                val (username, password) = getStoredCredentials()
+                println("Using credentials - Username: $username")
+                
                 val authBody = mapOf(
-                    "Username" to "BNET- -USER",
-                    "Password" to "",
-                    "Pw" to ""
+                    "Username" to username,
+                    "Password" to password,
+                    "Pw" to password
                 )
                 
                 val authResponse = app.post(
