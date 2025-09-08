@@ -109,7 +109,7 @@ class FTPBDProvider : MainAPI() {
             try {
                 println("Attempting to authenticate...")
                 val authBody = mapOf(
-                    "Username" to "BNET--USER",
+                    "Username" to "BNET- -USER",
                     "Password" to "",
                     "Pw" to ""
                 )
@@ -126,14 +126,16 @@ class FTPBDProvider : MainAPI() {
                 accessToken = authResponse?.accessToken
                 userId = authResponse?.user?.id
                 
-                if (accessToken != null) {
-                    println("Authentication successful. User ID: $userId")
+                if (accessToken != null && userId != null) {
+                    println("Authentication successful. User ID: $userId, Token: ${accessToken?.take(10)}...")
                 } else {
-                    println("Authentication failed - no access token received")
+                    println("Authentication failed - no access token or user ID received")
+                    println("Response: $authResponse")
                 }
             } catch (e: Exception) {
-                // If authentication fails, try without authentication
-                println("Authentication failed: ${e.message}")
+                println("Authentication failed with exception: ${e.message}")
+                e.printStackTrace()
+                // Continue without authentication - some endpoints might still work
                 println("Continuing without authentication...")
             }
         }
