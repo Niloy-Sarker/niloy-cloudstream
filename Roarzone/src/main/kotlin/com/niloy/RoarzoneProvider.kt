@@ -6,6 +6,9 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import java.net.URLEncoder
+import android.content.Context
+import android.content.SharedPreferences
+import com.lagradost.cloudstream3.AcraApplication.Companion.context
 
 class RoarzoneProvider : MainAPI() {
     override var mainUrl = "https://play.roarzone.info"
@@ -113,15 +116,55 @@ class RoarzoneProvider : MainAPI() {
         @JsonProperty("Name") val name: String = ""
     )
 
+    private fun getStoredCredentials(): Pair<String, String> {
+        return try {
+            val appContext = context
+            if (appContext == null) {
+                println("Context is null, using default credentials")
+                return Pair(RoarzoneSettingsDialog.DEFAULT_USERNAME, RoarzoneSettingsDialog.DEFAULT_PASSWORD)
+            }
+            
+            val sharedPreferences = appContext.getSharedPreferences(
+                RoarzoneSettingsDialog.PREF_NAME, 
+                Context.MODE_PRIVATE
+            )
+            
+            val isLoggedIn = sharedPreferences.getBoolean(RoarzoneSettingsDialog.KEY_IS_LOGGED_IN, false)
+            
+            if (isLoggedIn) {
+                val username = sharedPreferences.getString(
+                    RoarzoneSettingsDialog.KEY_USERNAME, 
+                    RoarzoneSettingsDialog.DEFAULT_USERNAME
+                ) ?: RoarzoneSettingsDialog.DEFAULT_USERNAME
+                
+                val password = sharedPreferences.getString(
+                    RoarzoneSettingsDialog.KEY_PASSWORD, 
+                    RoarzoneSettingsDialog.DEFAULT_PASSWORD
+                ) ?: RoarzoneSettingsDialog.DEFAULT_PASSWORD
+                
+                Pair(username, password)
+            } else {
+                // Use default credentials if not logged in
+                Pair(RoarzoneSettingsDialog.DEFAULT_USERNAME, RoarzoneSettingsDialog.DEFAULT_PASSWORD)
+            }
+        } catch (e: Exception) {
+            println("Error getting stored credentials: ${e.message}")
+            // Fallback to default credentials
+            Pair(RoarzoneSettingsDialog.DEFAULT_USERNAME, RoarzoneSettingsDialog.DEFAULT_PASSWORD)
+        }
+    }
+
     private suspend fun authenticate() {
         if (accessToken == null) {
             try {
                 println("Attempting to authenticate with RoarZone...")
+                val (username, password) = getStoredCredentials()
+                println("Using credentials - Username: $username")
                 
                 val authBody = mapOf(
-                    "Username" to DEFAULT_USERNAME,
-                    "Password" to DEFAULT_PASSWORD,
-                    "Pw" to DEFAULT_PASSWORD
+                    "Username" to username,
+                    "Password" to password,
+                    "Pw" to password
                 )
                 
                 val authResponse = app.post(
