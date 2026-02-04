@@ -323,19 +323,38 @@ class FMFTPProvider : MainAPI() {
             ActorData(Actor(it.trim()))
         }
 
+        // Try to get TMDB data if enabled and tmdb_id is available
+        val tmdbData = response.tmdbId?.toIntOrNull()?.let { tmdbId ->
+            if (FMFTPTmdbHelper.isEnabled()) {
+                FMFTPTmdbHelper.getMovieDetails(tmdbId)
+            } else null
+        }
+
+        // Use TMDB data if available, otherwise fall back to FMFTP data
+        val finalPoster = tmdbData?.posterPath?.let { FMFTPTmdbHelper.getPosterUrl(it) } 
+            ?: getImageUrl(response.posterPath)
+        val finalBackdrop = tmdbData?.backdropPath?.let { FMFTPTmdbHelper.getBackdropUrl(it) } 
+            ?: getImageUrl(response.backdropPath)
+        val finalPlot = tmdbData?.overview?.takeIf { it.isNotEmpty() } ?: response.overview
+        val finalRating = tmdbData?.rating?.times(1000)?.toInt() 
+            ?: response.onlineRating?.times(1000)?.toInt()
+        val finalTags = tmdbData?.genres?.mapNotNull { it.name } 
+            ?: response.genre?.split(",")?.map { it.trim() }
+
         return newMovieLoadResponse(
             name = response.title,
             url = url,
             type = TvType.Movie,
             dataUrl = "$mainUrl/api/stream/video/stream?type=movies&id=${response.id}"
         ) {
-            this.posterUrl = getImageUrl(response.posterPath)
-            this.backgroundPosterUrl = getImageUrl(response.backdropPath)
+            this.posterUrl = finalPoster
+            this.backgroundPosterUrl = finalBackdrop
             this.year = response.year
-            this.plot = response.overview
-            this.tags = response.genre?.split(",")?.map { it.trim() }
-            this.rating = response.onlineRating?.times(1000)?.toInt()
+            this.plot = finalPlot
+            this.tags = finalTags
+            this.rating = finalRating
             this.actors = actors
+            tmdbData?.runtime?.let { this.duration = it }
         }
     }
 
@@ -347,19 +366,58 @@ class FMFTPProvider : MainAPI() {
             ActorData(Actor(it.trim()))
         }
 
+        // Get unique season numbers from episodes
+        val seasonNumbers = (response.episodes ?: emptyList())
+            .map { it.season_number }
+            .toSet()
+
+        // Try to get TMDB data if enabled and tmdb_id is available
+        val tmdbId = response.tmdb_id?.toIntOrNull()
+        val tmdbData = if (tmdbId != null && FMFTPTmdbHelper.isEnabled()) {
+            FMFTPTmdbHelper.getTvShowWithAllSeasons(tmdbId, seasonNumbers)
+        } else null
+
         // Sort episodes by season number first, then by episode number
         val episodes = (response.episodes ?: emptyList())
             .sortedWith(compareBy({ it.season_number }, { it.episode_number }))
             .map { ep ->
+                // Try to find TMDB episode data
+                val tmdbEpisode = tmdbData?.seasonDetails?.get(ep.season_number)?.let { seasonData ->
+                    FMFTPTmdbHelper.findEpisodeInSeasonData(seasonData, ep.episode_number)
+                }
+
+                // Use TMDB data if available, otherwise fall back to FMFTP data
+                val episodePoster = tmdbEpisode?.stillPath?.let { FMFTPTmdbHelper.getStillUrl(it) }
+                    ?: getImageUrl(ep.still_path)
+                val episodeRating = tmdbEpisode?.rating?.times(10)?.toInt()
+                    ?: ep.online_rating?.times(10)?.toInt()
+                val episodeDescription = tmdbEpisode?.overview?.takeIf { it.isNotEmpty() }
+                    ?: ep.overview
+                val episodeName = tmdbEpisode?.name?.takeIf { it.isNotEmpty() }
+                    ?: ep.name
+                    ?: "Episode ${ep.episode_number}"
+
                 newEpisode("$mainUrl/api/stream/video/stream?type=tv_shows&id=${ep.id}") {
-                    this.name = ep.name ?: "Episode ${ep.episode_number}"
+                    this.name = episodeName
                     this.season = ep.season_number
                     this.episode = ep.episode_number
-                    this.posterUrl = getImageUrl(ep.still_path)
-                    this.rating = ep.online_rating?.times(10)?.toInt()
-                    this.description = ep.overview
+                    this.posterUrl = episodePoster
+                    this.rating = episodeRating
+                    this.description = episodeDescription
                 }
             }
+
+        // Use TMDB show data if available
+        val tvDetails = tmdbData?.tvDetails
+        val finalPoster = tvDetails?.posterPath?.let { FMFTPTmdbHelper.getPosterUrl(it) }
+            ?: getImageUrl(response.poster_path)
+        val finalBackdrop = tvDetails?.backdropPath?.let { FMFTPTmdbHelper.getBackdropUrl(it) }
+            ?: getImageUrl(response.backdrop_path)
+        val finalPlot = tvDetails?.overview?.takeIf { it.isNotEmpty() } ?: response.overview
+        val finalRating = tvDetails?.rating?.times(1000)?.toInt()
+            ?: response.online_rating?.times(1000)?.toInt()
+        val finalTags = tvDetails?.genres?.mapNotNull { it.name }
+            ?: response.genre?.split(",")?.map { it.trim() }
 
         return newTvSeriesLoadResponse(
             name = response.title,
@@ -367,12 +425,12 @@ class FMFTPProvider : MainAPI() {
             type = TvType.TvSeries,
             episodes = episodes
         ) {
-            this.posterUrl = getImageUrl(response.poster_path)
-            this.backgroundPosterUrl = getImageUrl(response.backdrop_path)
+            this.posterUrl = finalPoster
+            this.backgroundPosterUrl = finalBackdrop
             this.year = response.year
-            this.plot = response.overview
-            this.tags = response.genre?.split(",")?.map { it.trim() }
-            this.rating = response.online_rating?.times(1000)?.toInt()
+            this.plot = finalPlot
+            this.tags = finalTags
+            this.rating = finalRating
             this.actors = actors
         }
     }
