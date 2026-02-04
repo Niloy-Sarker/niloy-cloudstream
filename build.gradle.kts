@@ -73,15 +73,14 @@ subprojects {
         val implementation by configurations
 
         // Stubs for all cloudstream classes
-        cloudstream("com.github.recloudstream.cloudstream:pre-release")
+        cloudstream("com.github.recloudstream:cloudstream:pre-release")
 
         // These dependencies can include any of those which are added by the app,
         // but you don't need to include any of them if you don't need them.
         // https://github.com/recloudstream/cloudstream/blob/master/app/build.gradle.kts
         implementation(kotlin("stdlib")) // Adds Standard Kotlin Features
-        implementation("com.github.Blatzar:NiceHttp:0.4.12") // HTTP Lib
+        implementation("com.github.Blatzar:NiceHttp:0.4.11") // HTTP Lib
         implementation("org.jsoup:jsoup:1.18.3") // HTML Parser
-        implementation("com.github.recloudstream.cloudstream:library-jvm:pre-release")
     }
 }
 
