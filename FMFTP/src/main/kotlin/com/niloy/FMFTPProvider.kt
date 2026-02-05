@@ -352,6 +352,7 @@ class FMFTPProvider : MainAPI() {
             this.year = response.year
             this.plot = finalPlot
             this.tags = finalTags
+            @Suppress("DEPRECATION")
             this.rating = finalRating
             this.actors = actors
             tmdbData?.runtime?.let { this.duration = it }
@@ -402,6 +403,7 @@ class FMFTPProvider : MainAPI() {
                     this.season = ep.season_number
                     this.episode = ep.episode_number
                     this.posterUrl = episodePoster
+                    @Suppress("DEPRECATION")
                     this.rating = episodeRating
                     this.description = episodeDescription
                 }
@@ -430,6 +432,7 @@ class FMFTPProvider : MainAPI() {
             this.year = response.year
             this.plot = finalPlot
             this.tags = finalTags
+            @Suppress("DEPRECATION")
             this.rating = finalRating
             this.actors = actors
         }

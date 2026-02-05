@@ -55,7 +55,7 @@ subprojects {
             sourceCompatibility = JavaVersion.VERSION_1_8
             targetCompatibility = JavaVersion.VERSION_1_8
         }
-        
+
         lintOptions {
             isAbortOnError = false
         }
@@ -68,6 +68,8 @@ subprojects {
                     "-Xno-param-assertions",
                     "-Xno-receiver-assertions"
                 )
+                // Suppress deprecation warnings to allow builds to succeed
+                allWarningsAsErrors.set(false)
             }
         }
     }

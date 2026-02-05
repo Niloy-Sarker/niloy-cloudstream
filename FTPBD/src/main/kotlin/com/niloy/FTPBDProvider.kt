@@ -382,6 +382,7 @@ class FTPBDProvider : MainAPI() {
                     ) {
                         this.year = item.productionYear
                         this.plot = item.overview
+                        @Suppress("DEPRECATION")
                         this.rating = item.communityRating?.times(1000)?.toInt()
                         this.tags = item.genres
                         this.duration = item.runTimeTicks?.let { (it / 10000000 / 60).toInt() } // Convert to minutes
@@ -407,6 +408,7 @@ class FTPBDProvider : MainAPI() {
                     ) {
                         this.year = item.productionYear
                         this.plot = item.overview
+                        @Suppress("DEPRECATION")
                         this.rating = item.communityRating?.times(1000)?.toInt()
                         this.tags = item.genres
                         this.posterUrl = getImageUrl(itemId, "Primary")
@@ -422,6 +424,7 @@ class FTPBDProvider : MainAPI() {
                     ) {
                         this.year = item.productionYear
                         this.plot = item.overview
+                        @Suppress("DEPRECATION")
                         this.rating = item.communityRating?.times(1000)?.toInt()
                         this.posterUrl = getImageUrl(itemId, "Primary")
                         this.backgroundPosterUrl = getImageUrl(itemId, "Backdrop")
