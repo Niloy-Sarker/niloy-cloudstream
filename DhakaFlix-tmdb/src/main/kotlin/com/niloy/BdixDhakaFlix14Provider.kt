@@ -496,10 +496,6 @@ open class BdixDhakaFlix14Provider : MainAPI() {
                         this.season = 1
                         this.episode = index + 1
                         this.description = episodeDetails?.overview
-                        episodeDetails?.rating?.let { rating ->
-                            @Suppress("DEPRECATION")
-                            this.rating = (rating * 10).toInt()
-                        }
                         episodeDetails?.stillPath?.let { still ->
                             this.posterUrl = TmdbHelper.getStillUrl(still)
                         }
@@ -512,8 +508,6 @@ open class BdixDhakaFlix14Provider : MainAPI() {
             newTvSeriesLoadResponse(name, url, tvType, episodesData) {
                 this.posterUrl = imageLink
                 this.plot = plot
-                @Suppress("DEPRECATION")
-                this.rating = rating
                 this.year = year
             }
         } else {
@@ -533,8 +527,6 @@ open class BdixDhakaFlix14Provider : MainAPI() {
             newMovieLoadResponse(name, url, movieType, link) {
                 this.posterUrl = imageLink
                 this.plot = plot
-                @Suppress("DEPRECATION")
-                this.rating = rating
                 this.year = year
             }
         }
@@ -652,10 +644,6 @@ open class BdixDhakaFlix14Provider : MainAPI() {
                     } else {
                         episodeDetails?.overview
                     }
-                    episodeDetails?.rating?.let { rating ->
-                        @Suppress("DEPRECATION")
-                        this.rating = (rating * 10).toInt()
-                    }
                     episodeDetails?.stillPath?.let { still ->
                         // Use small size for episode stills initially
                         this.posterUrl = TmdbHelper.getStillUrl(still)
@@ -733,10 +721,6 @@ open class BdixDhakaFlix14Provider : MainAPI() {
                     }
                 } else {
                     episodeDetails?.overview
-                }
-                episodeDetails?.rating?.let { rating ->
-                    @Suppress("DEPRECATION")
-                    this.rating = (rating * 10).toInt()
                 }
                 episodeDetails?.stillPath?.let { still ->
                     // Use small size for episode stills initially
