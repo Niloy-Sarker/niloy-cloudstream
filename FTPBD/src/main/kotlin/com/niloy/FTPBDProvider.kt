@@ -46,73 +46,73 @@ class FTPBDProvider : MainAPI() {
 
     // Emby API Data Classes
     data class EmbySearchResult(
-        @JsonProperty("Items") val items: List<EmbyItem> = listOf(),
-        @JsonProperty("TotalRecordCount") val totalRecordCount: Int = 0
+        @param:JsonProperty("Items") val items: List<EmbyItem> = listOf(),
+        @param:JsonProperty("TotalRecordCount") val totalRecordCount: Int = 0
     )
 
     data class EmbyItem(
-        @JsonProperty("Id") val id: String = "",
-        @JsonProperty("Name") val name: String = "",
-        @JsonProperty("Type") val type: String = "",
-        @JsonProperty("ProductionYear") val productionYear: Int? = null,
-        @JsonProperty("RunTimeTicks") val runTimeTicks: Long? = null,
-        @JsonProperty("SeriesName") val seriesName: String? = null,
-        @JsonProperty("SeasonName") val seasonName: String? = null,
-        @JsonProperty("IndexNumber") val indexNumber: Int? = null,
-        @JsonProperty("ParentIndexNumber") val parentIndexNumber: Int? = null,
-        @JsonProperty("Overview") val overview: String? = null,
-        @JsonProperty("CommunityRating") val communityRating: Float? = null,
-        @JsonProperty("MediaStreams") val mediaStreams: List<MediaStream>? = null,
-        @JsonProperty("Path") val path: String? = null,
-        @JsonProperty("Studios") val studios: List<Studio>? = null,
-        @JsonProperty("Genres") val genres: List<String>? = null,
-        @JsonProperty("People") val people: List<Person>? = null,
-        @JsonProperty("BackdropImageTags") val backdropImageTags: List<String>? = null,
-        @JsonProperty("ImageTags") val imageTags: ImageTags? = null,
-        @JsonProperty("SeasonId") val seasonId: String? = null,
-        @JsonProperty("SeriesId") val seriesId: String? = null
+        @param:JsonProperty("Id") val id: String = "",
+        @param:JsonProperty("Name") val name: String = "",
+        @param:JsonProperty("Type") val type: String = "",
+        @param:JsonProperty("ProductionYear") val productionYear: Int? = null,
+        @param:JsonProperty("RunTimeTicks") val runTimeTicks: Long? = null,
+        @param:JsonProperty("SeriesName") val seriesName: String? = null,
+        @param:JsonProperty("SeasonName") val seasonName: String? = null,
+        @param:JsonProperty("IndexNumber") val indexNumber: Int? = null,
+        @param:JsonProperty("ParentIndexNumber") val parentIndexNumber: Int? = null,
+        @param:JsonProperty("Overview") val overview: String? = null,
+        @param:JsonProperty("CommunityRating") val communityRating: Float? = null,
+        @param:JsonProperty("MediaStreams") val mediaStreams: List<MediaStream>? = null,
+        @param:JsonProperty("Path") val path: String? = null,
+        @param:JsonProperty("Studios") val studios: List<Studio>? = null,
+        @param:JsonProperty("Genres") val genres: List<String>? = null,
+        @param:JsonProperty("People") val people: List<Person>? = null,
+        @param:JsonProperty("BackdropImageTags") val backdropImageTags: List<String>? = null,
+        @param:JsonProperty("ImageTags") val imageTags: ImageTags? = null,
+        @param:JsonProperty("SeasonId") val seasonId: String? = null,
+        @param:JsonProperty("SeriesId") val seriesId: String? = null
     )
 
     data class MediaStream(
-        @JsonProperty("Type") val type: String = "",
-        @JsonProperty("Codec") val codec: String? = null,
-        @JsonProperty("Language") val language: String? = null,
-        @JsonProperty("DisplayTitle") val displayTitle: String? = null,
-        @JsonProperty("Width") val width: Int? = null,
-        @JsonProperty("Height") val height: Int? = null
+        @param:JsonProperty("Type") val type: String = "",
+        @param:JsonProperty("Codec") val codec: String? = null,
+        @param:JsonProperty("Language") val language: String? = null,
+        @param:JsonProperty("DisplayTitle") val displayTitle: String? = null,
+        @param:JsonProperty("Width") val width: Int? = null,
+        @param:JsonProperty("Height") val height: Int? = null
     )
 
     data class Studio(
-        @JsonProperty("Name") val name: String = ""
+        @param:JsonProperty("Name") val name: String = ""
     )
 
     data class Person(
-        @JsonProperty("Name") val name: String = "",
-        @JsonProperty("Role") val role: String? = null,
-        @JsonProperty("Type") val type: String = ""
+        @param:JsonProperty("Name") val name: String = "",
+        @param:JsonProperty("Role") val role: String? = null,
+        @param:JsonProperty("Type") val type: String = ""
     )
 
     data class ImageTags(
-        @JsonProperty("Primary") val primary: String? = null,
-        @JsonProperty("Backdrop") val backdrop: String? = null
+        @param:JsonProperty("Primary") val primary: String? = null,
+        @param:JsonProperty("Backdrop") val backdrop: String? = null
     )
 
     data class EmbySeasonResult(
-        @JsonProperty("Items") val items: List<EmbyItem> = listOf()
+        @param:JsonProperty("Items") val items: List<EmbyItem> = listOf()
     )
 
     data class EmbyEpisodeResult(
-        @JsonProperty("Items") val items: List<EmbyItem> = listOf()
+        @param:JsonProperty("Items") val items: List<EmbyItem> = listOf()
     )
 
     data class EmbyAuthResult(
-        @JsonProperty("AccessToken") val accessToken: String = "",
-        @JsonProperty("User") val user: EmbyUser? = null
+        @param:JsonProperty("AccessToken") val accessToken: String = "",
+        @param:JsonProperty("User") val user: EmbyUser? = null
     )
 
     data class EmbyUser(
-        @JsonProperty("Id") val id: String = "",
-        @JsonProperty("Name") val name: String = ""
+        @param:JsonProperty("Id") val id: String = "",
+        @param:JsonProperty("Name") val name: String = ""
     )
 
     // Authentication variables - moved to companion object for static access

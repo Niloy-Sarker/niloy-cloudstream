@@ -8,6 +8,8 @@ android {
 dependencies {
     implementation("com.fasterxml.jackson.core:jackson-annotations:2.14.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("com.google.android.material:material:1.9.0")
 }
 
 cloudstream {

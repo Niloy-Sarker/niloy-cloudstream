@@ -2,7 +2,6 @@ package com.niloy
 
 import android.app.AlertDialog
 import android.app.Dialog
-import android.app.DialogFragment
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
@@ -10,8 +9,9 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 
-class RoarzoneSettingsDialog : DialogFragment() {
+class RoarzoneSettingsDialog : BottomSheetDialogFragment() {
     
     companion object {
         const val PREF_NAME = "roarzone_settings"
@@ -27,7 +27,7 @@ class RoarzoneSettingsDialog : DialogFragment() {
     }
     
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        val context = activity ?: throw IllegalStateException("Activity cannot be null")
+        val context = requireContext()
         val sharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         
         // Create main layout

@@ -2,18 +2,18 @@ package com.niloy
 
 import android.app.AlertDialog
 import android.app.Dialog
-import android.app.DialogFragment
 import android.os.Bundle
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.lagradost.cloudstream3.AcraApplication
 
-class DhakaFlixSettings : DialogFragment() {
+class DhakaFlixSettings : BottomSheetDialogFragment() {
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        val context = activity ?: throw IllegalStateException("Activity cannot be null")
+        val context = requireContext()
         
         // Create main layout
         val layout = LinearLayout(context).apply {
@@ -123,7 +123,7 @@ class DhakaFlixSettings : DialogFragment() {
 
     private fun showToast(message: String) {
         try {
-            Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             try {
                 Toast.makeText(AcraApplication.context, message, Toast.LENGTH_SHORT).show()

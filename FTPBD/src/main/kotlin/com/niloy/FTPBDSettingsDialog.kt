@@ -2,7 +2,6 @@ package com.niloy
 
 import android.app.AlertDialog
 import android.app.Dialog
-import android.app.DialogFragment
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
@@ -11,8 +10,9 @@ import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 
-class FTPBDSettingsDialog : DialogFragment() {
+class FTPBDSettingsDialog : BottomSheetDialogFragment() {
     
     companion object {
         const val PREF_NAME = "ftpbd_settings"
@@ -28,7 +28,7 @@ class FTPBDSettingsDialog : DialogFragment() {
     }
     
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        val context = activity ?: throw IllegalStateException("Activity cannot be null")
+        val context = requireContext()
         val sharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         
         // Create main layout
