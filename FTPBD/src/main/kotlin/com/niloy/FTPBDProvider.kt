@@ -6,6 +6,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.M3u8Helper
 import com.lagradost.cloudstream3.utils.Qualities
+import com.lagradost.cloudstream3.utils.newExtractorLink
 import kotlinx.coroutines.delay
 import org.jsoup.nodes.Element
 import java.net.URLEncoder
@@ -501,13 +502,14 @@ class FTPBDProvider : MainAPI() {
             }
 
             callback.invoke(
-                ExtractorLink(
+                newExtractorLink(
                     this.name,
                     "${this.name} - ${videoStream?.displayTitle ?: "Direct"}",
-                    streamUrl,
-                    referer = mainUrl,
-                    quality = quality
-                )
+                    streamUrl
+                ) {
+                    this.referer = mainUrl
+                    this.quality = quality
+                }
             )
 
             // Load subtitles

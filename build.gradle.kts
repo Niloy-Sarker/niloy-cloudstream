@@ -66,10 +66,12 @@ subprojects {
                 freeCompilerArgs.addAll(
                     "-Xno-call-assertions",
                     "-Xno-param-assertions",
-                    "-Xno-receiver-assertions"
+                    "-Xno-receiver-assertions",
+                    "-Xsuppress-version-warnings"
                 )
                 // Suppress deprecation warnings to allow builds to succeed
                 allWarningsAsErrors.set(false)
+                suppressWarnings.set(true)
             }
         }
     }
