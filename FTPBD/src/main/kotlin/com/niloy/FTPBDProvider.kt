@@ -506,8 +506,7 @@ class FTPBDProvider : MainAPI() {
                     "${this.name} - ${videoStream?.displayTitle ?: "Direct"}",
                     streamUrl,
                     referer = mainUrl,
-                    quality = quality,
-                    type = ExtractorLinkType.VIDEO
+                    quality = quality
                 )
             )
 
