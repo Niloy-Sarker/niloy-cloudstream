@@ -3,8 +3,8 @@ package com.niloy
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
+import com.lagradost.cloudstream3.utils.newExtractorLink
 import java.net.URLEncoder
 import android.content.Context
 import android.content.SharedPreferences
@@ -378,7 +378,6 @@ class RoarzoneProvider : MainAPI() {
                     ) {
                         this.year = item.productionYear
                         this.plot = item.overview
-                        this.rating = item.communityRating?.times(1000)?.toInt()
                         this.tags = item.genres
                         this.duration = item.runTimeTicks?.let { (it / 10000000 / 60).toInt() } // Convert to minutes
                         this.actors = actors
@@ -403,7 +402,6 @@ class RoarzoneProvider : MainAPI() {
                     ) {
                         this.year = item.productionYear
                         this.plot = item.overview
-                        this.rating = item.communityRating?.times(1000)?.toInt()
                         this.tags = item.genres
                         this.posterUrl = getImageUrl(itemId, "Primary")
                         this.backgroundPosterUrl = getImageUrl(itemId, "Backdrop")
@@ -418,7 +416,6 @@ class RoarzoneProvider : MainAPI() {
                     ) {
                         this.year = item.productionYear
                         this.plot = item.overview
-                        this.rating = item.communityRating?.times(1000)?.toInt()
                         this.posterUrl = getImageUrl(itemId, "Primary")
                         this.backgroundPosterUrl = getImageUrl(itemId, "Backdrop")
                     }
@@ -500,14 +497,14 @@ class RoarzoneProvider : MainAPI() {
             }
 
             callback.invoke(
-                ExtractorLink(
+                newExtractorLink(
                     this.name,
                     "${this.name} - ${videoStream?.displayTitle ?: "Direct"}",
-                    streamUrl,
-                    referer = mainUrl,
-                    quality = quality,
-                    type = ExtractorLinkType.VIDEO
-                )
+                    streamUrl
+                ) {
+                    this.referer = mainUrl
+                    this.quality = quality
+                }
             )
 
             // Load subtitles
