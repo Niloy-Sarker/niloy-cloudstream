@@ -11,7 +11,10 @@ import android.content.SharedPreferences
 import com.lagradost.cloudstream3.AcraApplication.Companion.context
 
 class RoarzoneProvider : MainAPI() {
-    override var mainUrl = "https://play.roarzone.info"
+    override var mainUrl: String
+        get() = getStoredSiteUrl()
+        set(_) {}
+
     override var name = "RoarZone"
     override val hasMainPage = true
     override val hasDownloadSupport = true
@@ -34,9 +37,10 @@ class RoarzoneProvider : MainAPI() {
         private var accessToken: String? = null
         private var userId: String? = null
         
-        // Default credentials
-        const val DEFAULT_USERNAME = "RoarZone_Guest"
-        const val DEFAULT_PASSWORD = ""
+        // Default credentials and URL
+        const val DEFAULT_SITE_URL = RoarzoneSettingsDialog.DEFAULT_SITE_URL
+        const val DEFAULT_USERNAME = RoarzoneSettingsDialog.DEFAULT_USERNAME
+        const val DEFAULT_PASSWORD = RoarzoneSettingsDialog.DEFAULT_PASSWORD
         
         fun clearAuthCache() {
             accessToken = null
@@ -115,6 +119,22 @@ class RoarzoneProvider : MainAPI() {
         @param:JsonProperty("Id") val id: String = "",
         @param:JsonProperty("Name") val name: String = ""
     )
+
+    private fun getStoredSiteUrl(): String {
+        return try {
+            val appContext = context ?: return DEFAULT_SITE_URL
+            val sharedPreferences = appContext.getSharedPreferences(
+                RoarzoneSettingsDialog.PREF_NAME,
+                Context.MODE_PRIVATE
+            )
+            sharedPreferences.getString(
+                RoarzoneSettingsDialog.KEY_SITE_URL,
+                DEFAULT_SITE_URL
+            )?.trim()?.trimEnd('/') ?: DEFAULT_SITE_URL
+        } catch (e: Exception) {
+            DEFAULT_SITE_URL
+        }
+    }
 
     private fun getStoredCredentials(): Pair<String, String> {
         return try {
