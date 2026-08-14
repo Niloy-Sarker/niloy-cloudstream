@@ -67,6 +67,7 @@ class CTGMoviesProvider : MainAPI() {
         @JsonProperty("still_url") val stillUrl: String? = null,
         @JsonProperty("air_date") val airDate: String? = null,
         @JsonProperty("runtime") val runtime: Int? = null,
+        @JsonProperty("tmdb_episode_id") val tmdbEpisodeId: Any? = null,
         @JsonProperty("links") val links: List<MediaLink>? = null
     )
 
@@ -83,6 +84,9 @@ class CTGMoviesProvider : MainAPI() {
         @JsonProperty("release_date") val releaseDate: String? = null,
         @JsonProperty("genres") val genres: String? = null,
         @JsonProperty("runtime") val runtime: Int? = null,
+        @JsonProperty("tmdb_id") val tmdbId: Any? = null,
+        @JsonProperty("imdb_id") val imdbId: String? = null,
+        @JsonProperty("trailer_url") val trailerUrl: String? = null,
         @JsonProperty("links") val links: List<MediaLink>? = null
     )
 
@@ -91,6 +95,8 @@ class CTGMoviesProvider : MainAPI() {
         @JsonProperty("kind") val kind: String? = null,
         @JsonProperty("title") val title: String? = null,
         @JsonProperty("year") val year: Int? = null,
+        @JsonProperty("tmdb_id") val tmdbId: Any? = null,
+        @JsonProperty("imdb_id") val imdbId: String? = null,
         @JsonProperty("movie") val movie: MediaDetails? = null,
         @JsonProperty("series") val series: MediaDetails? = null,
         @JsonProperty("links") val links: List<MediaLink>? = null
@@ -275,6 +281,29 @@ class CTGMoviesProvider : MainAPI() {
 
         val tags = mediaDetails?.genres?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() }
 
+        val tmdbId = mediaDetails?.tmdbId?.toString()?.toIntOrNull()
+            ?: Regex("""["']tmdb_id["']\s*:\s*([0-9]+)""").find(html)?.groupValues?.getOrNull(1)?.toIntOrNull()
+
+        val imdbId = mediaDetails?.imdbId
+            ?: Regex("""["']imdb_id["']\s*:\s*["'](tt[0-9]+)["']""").find(html)?.groupValues?.getOrNull(1)
+            ?: document.selectFirst("a[href*='imdb.com/title/']")?.attr("href")?.substringAfter("title/")?.substringBefore("/")
+
+        val trailerUrl = mediaDetails?.trailerUrl
+            ?: document.selectFirst("iframe[src*='youtube.com/embed/'], iframe[src*='youtube-nocookie.com/embed/']")?.attr("src")
+
+        // Build syncData map for IntroDB and AniSkip
+        val sync = mutableMapOf<String, String>()
+        if (tmdbId != null) sync["tmdb"] = tmdbId.toString()
+        if (!imdbId.isNullOrBlank()) sync["imdb"] = imdbId
+
+        // For anime or animation content, query AniList/MAL to trigger AniSkip
+        val isAnimeOrAnimation = isAnime || tags?.any { it.contains("anime", true) || it.contains("animation", true) } == true
+        if (isAnimeOrAnimation) {
+            val (anilistId, malId) = fetchAniListIds(title)
+            if (anilistId != null) sync["anilist"] = anilistId.toString()
+            if (malId != null) sync["mal"] = malId.toString()
+        }
+
         if (isSeries) {
             val tvType = if (isAnime) TvType.Anime else TvType.TvSeries
 
@@ -313,6 +342,7 @@ class CTGMoviesProvider : MainAPI() {
                 this.score = rating?.let { Score.from10(it.toDouble()) }
                 this.tags = tags
                 this.duration = mediaDetails?.runtime
+                if (sync.isNotEmpty()) this.syncData = sync
             }
         } else {
             // Movie Load Response - combine RSC, DOM, and Regex extracted links
@@ -328,7 +358,9 @@ class CTGMoviesProvider : MainAPI() {
                 url
             }
 
-            return newMovieLoadResponse(title, url, TvType.Movie, movieDataJson) {
+            val movieType = if (isAnime) TvType.AnimeMovie else TvType.Movie
+
+            return newMovieLoadResponse(title, url, movieType, movieDataJson) {
                 this.posterUrl = posterUrl
                 this.backgroundPosterUrl = backdropUrl
                 this.plot = plot
@@ -336,6 +368,7 @@ class CTGMoviesProvider : MainAPI() {
                 this.score = rating?.let { Score.from10(it.toDouble()) }
                 this.tags = tags
                 this.duration = mediaDetails?.runtime
+                if (sync.isNotEmpty()) this.syncData = sync
             }
         }
     }
@@ -686,5 +719,42 @@ class CTGMoviesProvider : MainAPI() {
             }
         }
         return sb.toString()
+    }
+
+    private suspend fun fetchAniListIds(title: String): Pair<Int?, Int?> {
+        return try {
+            val cleanTitle = title
+                .replace(Regex("""\b(19\d\d|20\d\d)\b"""), "")
+                .replace(Regex("""\[.*?\]"""), "")
+                .replace(Regex("""\(.*?\)"""), "")
+                .trim()
+
+            val query = """
+                query (${'$'}search: String) {
+                  Media (search: ${'$'}search, type: ANIME) {
+                    id
+                    idMal
+                  }
+                }
+            """.trimIndent()
+
+            val res = app.post(
+                "https://graphql.anilist.co",
+                headers = mapOf(
+                    "Content-Type" to "application/json",
+                    "Accept" to "application/json",
+                    "User-Agent" to "Mozilla/5.0"
+                ),
+                json = mapOf("query" to query, "variables" to mapOf("search" to cleanTitle))
+            ).text
+
+            val root = mapper.readTree(res)
+            val media = root.path("data").path("Media")
+            val anilistId = media.path("id").asInt().takeIf { it > 0 }
+            val malId = media.path("idMal").asInt().takeIf { it > 0 }
+            Pair(anilistId, malId)
+        } catch (e: Exception) {
+            Pair(null, null)
+        }
     }
 }
