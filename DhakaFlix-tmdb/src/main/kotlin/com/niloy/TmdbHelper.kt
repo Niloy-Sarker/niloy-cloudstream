@@ -44,6 +44,10 @@ data class TmdbSeasonDetails(
     @param:JsonProperty("episodes") val episodes: List<TmdbEpisodeDetails>? = null
 )
 
+data class TmdbExternalIds(
+    @param:JsonProperty("imdb_id") val imdbId: String? = null
+)
+
 object TmdbHelper {
     private const val TMDB_API = "https://api.themoviedb.org/3"
     private const val TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
@@ -272,6 +276,33 @@ object TmdbHelper {
             parseJson(response)
         } catch (e: Exception) {
             Log.e(TAG, "Error getting season details: ${e.message}")
+            null
+        }
+    }
+
+    suspend fun getImdbIdFromTmdb(
+        tmdbId: Int,
+        isMovie: Boolean
+    ): String? {
+        if (!DhakaFlixSettingsManager.isTmdbEnabled()) {
+            Log.d(TAG, "TMDB integration is disabled, skipping external IDs")
+            return null
+        }
+
+        val apiKey = getApiKey()
+        if (apiKey.isEmpty()) {
+            Log.d(TAG, "No API key set, skipping external IDs")
+            return null
+        }
+
+        val type = if (isMovie) "movie" else "tv"
+        val url = "$TMDB_API/$type/$tmdbId/external_ids?api_key=$apiKey"
+
+        return try {
+            val response = makeApiCall(url) ?: return null
+            parseJson<TmdbExternalIds>(response).imdbId
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting external IDs: ${e.message}")
             null
         }
     }

@@ -3,6 +3,8 @@ package com.niloy
 import com.lagradost.cloudstream3.Episode
 import com.lagradost.cloudstream3.HomePageResponse
 import com.lagradost.cloudstream3.LoadResponse
+import com.lagradost.cloudstream3.LoadResponse.Companion.addImdbId
+import com.lagradost.cloudstream3.LoadResponse.Companion.addTMDbId
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.MainPageRequest
 import com.lagradost.cloudstream3.SearchResponse
@@ -401,6 +403,7 @@ open class BdixDhakaFlix14Provider : MainAPI() {
         }
 
         if (isTvSeries || isAnimeContent) {
+            val imdbId = tmdbId?.let { TmdbHelper.getImdbIdFromTmdb(it, isMovie = false) }
             val episodesData = mutableListOf<Episode>()
             val seasonNumbers = mutableListOf<Int>()
             val seasonFolders = mutableListOf<Triple<String, String, Pair<Int?, String?>>>()
@@ -509,6 +512,8 @@ open class BdixDhakaFlix14Provider : MainAPI() {
                 this.posterUrl = imageLink
                 this.plot = plot
                 this.year = year
+                addTMDbId(tmdbId?.toString())
+                addImdbId(imdbId)
             }
         } else {
             // Find the movie file link
@@ -523,11 +528,14 @@ open class BdixDhakaFlix14Provider : MainAPI() {
             }
             
             val movieType = if (isAnimeContent) TvType.AnimeMovie else TvType.Movie
+            val imdbId = tmdbId?.let { TmdbHelper.getImdbIdFromTmdb(it, isMovie = true) }
             
             newMovieLoadResponse(name, url, movieType, link) {
                 this.posterUrl = imageLink
                 this.plot = plot
                 this.year = year
+                addTMDbId(tmdbId?.toString())
+                addImdbId(imdbId)
             }
         }
     }
