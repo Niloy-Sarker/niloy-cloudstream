@@ -59,7 +59,8 @@ subprojects {
                     "-Xno-call-assertions",
                     "-Xno-param-assertions",
                     "-Xno-receiver-assertions",
-                    "-Xannotation-default-target=param-property"
+                    "-Xannotation-default-target=param-property",
+                    "-opt-in=com.lagradost.cloudstream3.Prerelease"
                 )
             )
         }
@@ -79,6 +80,7 @@ subprojects {
         implementation("androidx.annotation:annotation:1.10.0")
         implementation("androidx.browser:browser:1.8.0")
         implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+        implementation("org.jspecify:jspecify:1.0.0")
     }
 }
 

@@ -8,7 +8,7 @@ import com.lagradost.cloudstream3.utils.newExtractorLink
 import java.net.URLEncoder
 import android.content.Context
 import android.content.SharedPreferences
-import com.lagradost.cloudstream3.AcraApplication.Companion.context
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.context
 
 class RoarzoneProvider : MainAPI() {
     override var mainUrl: String

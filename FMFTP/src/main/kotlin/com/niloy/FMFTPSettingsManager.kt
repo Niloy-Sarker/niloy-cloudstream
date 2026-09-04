@@ -3,7 +3,7 @@ package com.niloy
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
-import com.lagradost.cloudstream3.AcraApplication.Companion.context
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.context
 
 object FMFTPSettingsManager {
     private const val SETTINGS_PREF = "fmftp_settings"

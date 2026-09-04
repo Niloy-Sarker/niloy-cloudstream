@@ -14,7 +14,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
-import com.lagradost.cloudstream3.AcraApplication
+import com.lagradost.cloudstream3.CloudStreamApp
 
 class RoarzoneSettingsDialog : BottomSheetDialogFragment() {
     
@@ -224,7 +224,7 @@ class RoarzoneSettingsDialog : BottomSheetDialogFragment() {
                 Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
             } catch (e2: Exception) {
                 try {
-                    Toast.makeText(AcraApplication.context, message, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(CloudStreamApp.context, message, Toast.LENGTH_SHORT).show()
                 } catch (e3: Exception) {
                     // Ignore if toast cannot be shown
                 }
