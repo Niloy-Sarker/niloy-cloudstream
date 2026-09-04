@@ -403,8 +403,8 @@ class CTGMoviesProvider : MainAPI() {
                     val sNum = Regex("""#S(\d+)""").find(data)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
                     val eNum = Regex("""E(\d+)""").find(data)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
                     val matchingEp = episodesList.find { (it.seasonNumber ?: 1) == sNum && (it.episodeNumber ?: 1) == eNum }
-                    if (!matchingEp?.links.isNullOrEmpty()) {
-                        links.addAll(matchingEp!!.links!!)
+                    matchingEp?.links?.let {
+                        links.addAll(it)
                     }
                 } else {
                     links.addAll(directLinks)
@@ -421,7 +421,7 @@ class CTGMoviesProvider : MainAPI() {
 
         var emitted = false
         for (link in links) {
-            val streamUrl = link.url ?: continue
+            val streamUrl = link.url?.let { fixUrl(it) } ?: continue
             if (streamUrl.isBlank()) continue
 
             val qualityStr = link.quality ?: "Direct"
@@ -436,9 +436,9 @@ class CTGMoviesProvider : MainAPI() {
 
             callback.invoke(
                 newExtractorLink(
-                    name = this.name,
-                    source = "${this.name} - $qualityStr ($serverName)",
-                    url = streamUrl
+                    this.name,
+                    "${this.name} - $qualityStr ($serverName)",
+                    streamUrl
                 ) {
                     this.quality = qualityInt
                     this.referer = "$mainUrl/"
@@ -451,9 +451,9 @@ class CTGMoviesProvider : MainAPI() {
                 val subUrl = sub.url?.let { fixUrl(it) }
                 if (!subUrl.isNullOrBlank()) {
                     subtitleCallback.invoke(
-                        SubtitleFile(
-                            lang = sub.label ?: sub.language ?: "English",
-                            url = subUrl
+                        newSubtitleFile(
+                            sub.label ?: sub.language ?: "English",
+                            subUrl
                         )
                     )
                 }

@@ -8,6 +8,7 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.addTMDbId
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.MainPageRequest
 import com.lagradost.cloudstream3.SearchResponse
+import com.lagradost.cloudstream3.Score
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.addDubStatus
@@ -512,6 +513,7 @@ open class BdixDhakaFlix14Provider : MainAPI() {
                 this.posterUrl = imageLink
                 this.plot = plot
                 this.year = year
+                this.score = tmdbData?.rating?.let { Score.from10(it) }
                 addTMDbId(tmdbId?.toString())
                 addImdbId(imdbId)
             }
@@ -534,6 +536,7 @@ open class BdixDhakaFlix14Provider : MainAPI() {
                 this.posterUrl = imageLink
                 this.plot = plot
                 this.year = year
+                this.score = tmdbData?.rating?.let { Score.from10(it) }
                 addTMDbId(tmdbId?.toString())
                 addImdbId(imdbId)
             }
@@ -784,7 +787,7 @@ open class BdixDhakaFlix14Provider : MainAPI() {
     ): Boolean {
         callback.invoke(
             newExtractorLink(
-                data, this.name, url = data, type = ExtractorLinkType.VIDEO
+                this.name, this.name, url = data, type = ExtractorLinkType.VIDEO
             )
         )
         return true

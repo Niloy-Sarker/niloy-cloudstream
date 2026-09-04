@@ -352,6 +352,7 @@ class FMFTPProvider : MainAPI() {
             this.year = response.year
             this.plot = finalPlot
             this.tags = finalTags
+            this.score = Score.from10(tmdbData?.rating ?: response.onlineRating)
             this.actors = actors
             tmdbData?.runtime?.let { this.duration = it }
         }
@@ -401,6 +402,7 @@ class FMFTPProvider : MainAPI() {
                     this.season = ep.season_number
                     this.episode = ep.episode_number
                     this.posterUrl = episodePoster
+                    this.score = Score.from10(tmdbEpisode?.rating ?: ep.online_rating)
                     this.description = episodeDescription
                 }
             }
@@ -428,6 +430,7 @@ class FMFTPProvider : MainAPI() {
             this.year = response.year
             this.plot = finalPlot
             this.tags = finalTags
+            this.score = Score.from10(tvDetails?.rating ?: response.online_rating)
             this.actors = actors
         }
     }

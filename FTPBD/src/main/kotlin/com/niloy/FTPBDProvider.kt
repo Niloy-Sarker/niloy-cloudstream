@@ -384,6 +384,7 @@ class FTPBDProvider : MainAPI() {
                         this.year = item.productionYear
                         this.plot = item.overview
                         this.tags = item.genres
+                        this.score = item.communityRating?.let { Score.from10(it.toDouble()) }
                         this.duration = item.runTimeTicks?.let { (it / 10000000 / 60).toInt() } // Convert to minutes
                         this.actors = actors
                         this.posterUrl = getImageUrl(itemId, "Primary")
@@ -408,6 +409,7 @@ class FTPBDProvider : MainAPI() {
                         this.year = item.productionYear
                         this.plot = item.overview
                         this.tags = item.genres
+                        this.score = item.communityRating?.let { Score.from10(it.toDouble()) }
                         this.posterUrl = getImageUrl(itemId, "Primary")
                         this.backgroundPosterUrl = getImageUrl(itemId, "Backdrop")
                     }
@@ -421,6 +423,7 @@ class FTPBDProvider : MainAPI() {
                     ) {
                         this.year = item.productionYear
                         this.plot = item.overview
+                        this.score = item.communityRating?.let { Score.from10(it.toDouble()) }
                         this.posterUrl = getImageUrl(itemId, "Primary")
                         this.backgroundPosterUrl = getImageUrl(itemId, "Backdrop")
                     }
@@ -457,6 +460,7 @@ class FTPBDProvider : MainAPI() {
                             this.season = episode.parentIndexNumber
                             this.episode = episode.indexNumber
                             this.description = episode.overview
+                            this.score = episode.communityRating?.let { Score.from10(it.toDouble()) }
                             this.posterUrl = getImageUrl(episode.id, "Primary")
                         }
                     )
@@ -521,7 +525,7 @@ class FTPBDProvider : MainAPI() {
                 }
                 
                 subtitleCallback.invoke(
-                    SubtitleFile(
+                    newSubtitleFile(
                         subtitle.language ?: "Unknown",
                         subtitleUrl
                     )

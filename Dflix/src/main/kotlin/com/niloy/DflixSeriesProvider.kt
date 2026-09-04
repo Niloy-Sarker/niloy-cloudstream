@@ -13,8 +13,9 @@ import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.mainPageOf
 import com.lagradost.cloudstream3.newEpisode
+import com.lagradost.cloudstream3.newAnimeSearchResponse
 import com.lagradost.cloudstream3.newHomePageResponse
-import com.lagradost.cloudstream3.newMovieSearchResponse
+import com.lagradost.cloudstream3.newTvSeriesSearchResponse
 import com.lagradost.cloudstream3.newTvSeriesLoadResponse
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
@@ -72,8 +73,15 @@ class DflixSeriesProvider : MainAPI() { // all providers must be an instance of 
         val title = post.select("div.fcard > div:nth-child(2) > div:nth-child(1)").text()
         val genreText = post.select(".ganre-wrapper > a").joinToString(",") { it.text().lowercase() }
         val type = if (genreText.contains("animation")) TvType.Anime else TvType.TvSeries
-        return newMovieSearchResponse(title, url, type) {
-            this.posterUrl = post.selectFirst("img:nth-child(1)")?.attr("src")
+        val poster = post.selectFirst("img:nth-child(1)")?.attr("src")
+        return if (type == TvType.Anime) {
+            newAnimeSearchResponse(title, url, type) {
+                this.posterUrl = poster
+            }
+        } else {
+            newTvSeriesSearchResponse(title, url, type) {
+                this.posterUrl = poster
+            }
         }
     }
 
@@ -82,8 +90,15 @@ class DflixSeriesProvider : MainAPI() { // all providers must be an instance of 
         val title = post.select("div.searchtitle").text()
         val genreText = post.select(".ganre-wrapper > a").joinToString(",") { it.text().lowercase() }
         val type = if (genreText.contains("animation")) TvType.Anime else TvType.TvSeries
-        return newMovieSearchResponse(title, url, type) {
-            this.posterUrl = post.selectFirst("img:nth-child(1)")?.attr("src")
+        val poster = post.selectFirst("img:nth-child(1)")?.attr("src")
+        return if (type == TvType.Anime) {
+            newAnimeSearchResponse(title, url, type) {
+                this.posterUrl = poster
+            }
+        } else {
+            newTvSeriesSearchResponse(title, url, type) {
+                this.posterUrl = poster
+            }
         }
     }
 
