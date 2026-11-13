@@ -49,6 +49,13 @@ jobs:
         with:
           packages: platform-tools
 
+      - name: Create local.properties
+        run: |
+          cat > $GITHUB_WORKSPACE/src/local.properties <<EOF
+          SIMKL_API=${{ secrets.SIMKL_API }}
+          TMDB_KEY=${{ secrets.TMDB_KEY }}
+          EOF
+
       - name: Build Plugins
         run: |
           cd $GITHUB_WORKSPACE/src
