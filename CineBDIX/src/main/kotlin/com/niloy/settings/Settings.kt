@@ -1,0 +1,238 @@
+package com.niloy.settings
+
+import android.content.Context
+import android.net.Uri
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
+import com.niloy.ProviderRegistry
+
+object Settings {
+
+    // ── Global keys ──────────────────────────────────────────
+    const val CONCURRENCY_KEY          = "ScrapeConcurrency"
+    const val DOWNLOAD_ENABLE          = "DownloadEnable"
+    const val PROVIDER_CINESTREAM      = "ProviderCineStream"
+    const val PROVIDER_SIMKL           = "ProviderSimkl"
+    const val PROVIDER_TMDB            = "ProviderTmdb"
+    const val TMDB_API_KEY_SETTING     = "tmdb_api_key"
+    const val TMDB_DEFAULT_KEY         = "307b7b8ef035c6aa336900aef4e203bd"
+    const val STREMIO_ADDONS_KEY       = "stremio_addons"
+    const val NEW_PROVIDER_DEFAULT_ON  = "new_provider_default_on"
+    const val CF_BYPASS_ENABLED        = "cloudflare_webview_bypass_enabled"
+
+    private const val SEEN_PROVIDERS_KEY = "seen_providers"
+    private const val PROVIDER_ORDER_KEY = "provider_order"
+
+    // ── Configuration Getters ────────────────────────────────
+    fun getConcurrency(): Int = getKey<Int>(CONCURRENCY_KEY) ?: 10
+
+    val allowDownloadLinks: Boolean
+        get() = getKey<Boolean>(DOWNLOAD_ENABLE) ?: false
+
+    val activeProviderOrder: List<String>
+        get() = getOrder().filter { enabled(it) }
+
+    fun cloudflareBypassEnabled(): Boolean = getKey<Boolean>(CF_BYPASS_ENABLED) ?: false
+
+    private fun normalizeBypassDomain(domain: String): String {
+        return domain.trim()
+            .removePrefix("https://")
+            .removePrefix("http://")
+            .removePrefix("www.")
+            .substringBefore('/')
+            .lowercase()
+            .trim()
+    }
+
+    data class BypassDomain(val domain: String, val displayName: String)
+
+    private val CLOUDFLARE_BYPASS_SITES: List<BypassDomain> = emptyList()
+
+    fun getCloudflareBypassDomains(): List<BypassDomain> = CLOUDFLARE_BYPASS_SITES
+
+    fun hasCloudflareBypassForUrl(url: String): Boolean {
+        if (CLOUDFLARE_BYPASS_SITES.isEmpty()) return false
+        val host = Uri.parse(url).host?.lowercase()?.trim().orEmpty()
+        if (host.isBlank()) return false
+        return CLOUDFLARE_BYPASS_SITES.any { site ->
+            val normalizedDomain = normalizeBypassDomain(site.domain)
+            normalizedDomain.isNotBlank() && (host == normalizedDomain || host.endsWith(".$normalizedDomain"))
+        }
+    }
+
+    // ── Per-domain cookie persistence (Cloudflare bypass) ────
+    private const val CF_COOKIE_KEY_PREFIX = "cf_cookie_"
+
+    private fun cookieKeyForDomain(urlOrDomain: String): String {
+        val domain = if (urlOrDomain.contains("://")) {
+            Uri.parse(urlOrDomain).host?.lowercase()?.removePrefix("www.")
+                ?: normalizeBypassDomain(urlOrDomain)
+        } else {
+            normalizeBypassDomain(urlOrDomain)
+        }
+        return "$CF_COOKIE_KEY_PREFIX$domain"
+    }
+
+    fun saveCookieForDomain(urlOrDomain: String, cookies: String) {
+        setKey(cookieKeyForDomain(urlOrDomain), cookies.trim())
+    }
+
+    fun getCookieForDomain(urlOrDomain: String): String? =
+        getKey<String>(cookieKeyForDomain(urlOrDomain))?.takeIf { it.isNotBlank() }
+
+    fun hasSavedCookieForDomain(urlOrDomain: String): Boolean =
+        !getCookieForDomain(urlOrDomain).isNullOrBlank()
+
+    fun removeCookieForDomain(urlOrDomain: String) {
+        setKey(cookieKeyForDomain(urlOrDomain), null as String?)
+    }
+
+    // ── Dynamic Provider Maps ────────────────────────────────
+    // We dynamically pull these from our single source of truth (ProviderRegistry)!
+    val TORRENT_KEYS: Set<String> get() = ProviderRegistry.torrentKeys
+    val PROVIDER_NAMES: Map<String, String> get() = ProviderRegistry.namesMap
+    val DEFAULT_ORDER: List<String> get() = ProviderRegistry.keys
+
+    // ── Provider ordering ────────────────────────────────────
+
+    fun newProviderDefaultOn(): Boolean = getKey<Boolean>(NEW_PROVIDER_DEFAULT_ON) ?: true
+
+    fun getSeenProviders(): Set<String> =
+        getKey<String>(SEEN_PROVIDERS_KEY)
+            ?.split(",")?.filter { it.isNotBlank() }?.toSet()
+            ?: emptySet()
+
+    fun initSeenProviders() {
+        val stremioKeys = getStremioAddons().map { stremioAddonKey(it.name) }
+        val allKnown    = (DEFAULT_ORDER + stremioKeys).toSet()
+        val currentSeen = getSeenProviders()
+
+        if (currentSeen.isEmpty()) {
+            setKey(SEEN_PROVIDERS_KEY, allKnown.joinToString(","))
+            return
+        }
+
+        val defaultState = newProviderDefaultOn()
+
+        allKnown.forEach { key ->
+            if (key !in currentSeen
+                && !key.startsWith("stremio_")
+                && key !in TORRENT_KEYS
+                && getKey<Boolean>(key) == null
+            ) {
+                setKey(key, defaultState)
+            }
+        }
+
+        val removedKeys = currentSeen - allKnown
+        removedKeys.forEach { setKey(it, null as Boolean?) }
+        val prunedSeen  = (currentSeen - removedKeys) + allKnown
+        setKey(SEEN_PROVIDERS_KEY, prunedSeen.joinToString(","))
+    }
+
+    fun markProvidersSeen(keys: Collection<String>) {
+        val currentlySeen = getSeenProviders()
+        val defaultState  = newProviderDefaultOn()
+        keys.forEach { key ->
+            if (key !in currentlySeen
+                && !key.startsWith("stremio_")
+                && key !in TORRENT_KEYS
+                && getKey<Boolean>(key) == null
+            ) {
+                setKey(key, defaultState)
+            }
+        }
+        val merged = currentlySeen + keys
+        setKey(SEEN_PROVIDERS_KEY, merged.joinToString(","))
+    }
+
+    fun enabled(key: String): Boolean {
+        val explicit = getKey<Boolean>(key)
+        if (explicit != null) return explicit
+        if (key.startsWith("stremio_")) return true
+        if (key in TORRENT_KEYS) return false
+        if (key !in getSeenProviders()) return newProviderDefaultOn()
+        return true
+    }
+
+    fun getOrder(): List<String> {
+        val stremioKeys = getStremioAddons().map { stremioAddonKey(it.name) }
+        val allKnown    = DEFAULT_ORDER + stremioKeys
+        val saved       = getKey<String>(PROVIDER_ORDER_KEY)
+            ?.split(",")?.filter { it.isNotBlank() }
+            ?: return allKnown
+
+        val validSaved = saved.filter { it in allKnown }
+        return validSaved + (allKnown - validSaved.toSet())
+    }
+
+    fun saveOrder(order: List<String>) =
+        setKey(PROVIDER_ORDER_KEY, order.joinToString(","))
+
+    // ── Stremio addon helpers ────────────────────────────────
+
+    enum class AddonType { HTTPS, TORRENT, DEBRID, SUBTITLE }
+
+    data class StremioAddon(val name: String, val url: String, val type: AddonType)
+
+    fun stremioAddonKey(name: String): String =
+        "stremio_${name.trim().lowercase().replace(Regex("[^a-z0-9]+"), "_").trim('_')}"
+
+    fun providerDisplayName(key: String): String {
+        PROVIDER_NAMES[key]?.let { return it }
+        if (key.startsWith("stremio_")) {
+            val addon = getStremioAddons().firstOrNull { stremioAddonKey(it.name) == key }
+            if (addon != null) {
+                val icon = when (addon.type) {
+                    AddonType.TORRENT  -> "🧲"
+                    AddonType.DEBRID   -> "☁️"
+                    AddonType.SUBTITLE -> "📝"
+                    AddonType.HTTPS    -> "🔌"
+                }
+                return "$icon ${addon.name}"
+            }
+            return "🔌 " + key.removePrefix("stremio_").replace("_", " ")
+                .replaceFirstChar { it.uppercaseChar() }
+        }
+        return key
+    }
+
+    fun isStremioTorrent(key: String): Boolean {
+        if (!key.startsWith("stremio_")) return false
+        return getStremioAddons().firstOrNull { stremioAddonKey(it.name) == key }
+            ?.type == AddonType.TORRENT
+    }
+
+    fun getStremioAddons(): MutableList<StremioAddon> {
+        val raw = getKey<String>(STREMIO_ADDONS_KEY) ?: return mutableListOf()
+        return raw.lines().filter { it.isNotBlank() }.mapNotNull { line ->
+            val parts = line.split("|")
+            if (parts.size < 3) return@mapNotNull null
+            val type = runCatching { AddonType.valueOf(parts[2]) }.getOrDefault(AddonType.HTTPS)
+            StremioAddon(name = parts[0], url = parts[1], type = type)
+        }.toMutableList()
+    }
+
+    fun saveStremioAddons(addons: List<StremioAddon>) {
+        if (addons.isEmpty()) setKey(STREMIO_ADDONS_KEY, null as String?)
+        else setKey(STREMIO_ADDONS_KEY, addons.joinToString("\n") { "${it.name}|${it.url}|${it.type}" })
+        val validKeys = addons.map { stremioAddonKey(it.name) }.toSet()
+        val current   = getKey<String>(PROVIDER_ORDER_KEY)
+            ?.split(",")?.filter { it.isNotBlank() } ?: return
+        val pruned = current.filter { !it.startsWith("stremio_") || it in validKeys }
+        if (pruned.size != current.size) saveOrder(pruned)
+    }
+
+    // ── TMDB API Key helpers ─────────────────────────────────
+    fun saveTmdbApiKey(key: String) = setKey(TMDB_API_KEY_SETTING, key.trim())
+    fun getTmdbApiKey(): String =
+        getKey<String>(TMDB_API_KEY_SETTING)?.takeIf { it.isNotBlank() }
+            ?: com.niloy.BuildConfig.TMDB_KEY.takeIf { it.isNotBlank() }
+            ?: TMDB_DEFAULT_KEY
+    fun getCustomTmdbApiKey(): String? = getKey<String>(TMDB_API_KEY_SETTING)?.takeIf { it.isNotBlank() }
+    fun clearTmdbApiKey()              = setKey(TMDB_API_KEY_SETTING, null as String?)
+
+    // ── Entry point ──────────────────────────────────────────
+    fun showSettingsDialog(context: Context, onSave: () -> Unit) =
+        SettingsDialog.show(context, onSave)
+}

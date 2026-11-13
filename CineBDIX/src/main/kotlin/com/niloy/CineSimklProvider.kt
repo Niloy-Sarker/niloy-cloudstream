@@ -1,0 +1,628 @@
+package com.niloy
+
+
+// Cloudstream Core & Utils
+import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.utils.*
+
+// Cloudstream Helpers
+import com.lagradost.cloudstream3.CommonActivity.activity
+import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
+import com.lagradost.cloudstream3.LoadResponse.Companion.addMalId
+import com.lagradost.cloudstream3.LoadResponse.Companion.addSimklId
+import com.lagradost.cloudstream3.LoadResponse.Companion.addTrailer
+import com.lagradost.cloudstream3.utils.AppUtils.parseJson
+import com.lagradost.cloudstream3.utils.AppUtils.toJson
+import com.lagradost.cloudstream3.utils.AppUtils.tryParseJson
+import com.lagradost.api.Log
+
+// Cloudstream Sync Providers
+import com.lagradost.cloudstream3.syncproviders.AccountManager
+import com.lagradost.cloudstream3.syncproviders.SyncIdName
+import com.lagradost.cloudstream3.syncproviders.SyncRepo
+
+// Coroutines
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+
+// JSON Parsing
+import org.json.JSONObject
+import org.jsoup.parser.Parser
+
+import com.niloy.CineStreamExtractors.invokeAllSources
+import com.niloy.CineStreamExtractors.invokeAllAnimeSources
+
+class CineSimklProvider: MainAPI() {
+    override var name = "CineSimkl BDIX"
+    override var mainUrl = "https://simkl.com"
+    override var supportedTypes = setOf(
+        TvType.Movie,
+        TvType.TvSeries,
+        TvType.Anime,
+        TvType.AsianDrama,
+        TvType.Torrent
+    )
+    override var lang = "bn"
+    override val hasMainPage = true
+    override val hasQuickSearch = true
+    override val supportedSyncNames = setOf(SyncIdName.Simkl)
+    private val apiUrl = "https://api.simkl.com"
+    private val simklDataAPI = "https://data.simkl.in"
+    private final val mediaLimit = 10
+    private val auth = com.lagradost.cloudstream3.BuildConfig.SIMKL_CLIENT_ID
+    private val auth2 = BuildConfig.SIMKL_API
+    private val headers = mapOf("Content-Type" to "application/json")
+    private val repo = SyncRepo(AccountManager.simklApi)
+    private val kitsuAPI = "https://anime-kitsu.strem.fun"
+    private val cinemetaAPI = "https://v3-cinemeta.strem.io"
+    private val image_proxy = "https://wsrv.nl/?url="
+    private val no_image = "https://wsrv.nl/?url=https://simkl.in/poster_no_pic.png"
+
+    override val mainPage = mainPageOf(
+        "/discover/trending/movies/today_500.json" to "Trending Movies Today",
+        "/discover/trending/tv/today_500.json" to "Trending Shows Today",
+        "/discover/trending/anime/today_500.json" to "Trending Anime Today",
+        "/anime/airing?today?sort=rank" to "Airing Anime Today",
+        "/tv/genres/all/all-types/kr/all-networks/this-year/popular-today?limit=$mediaLimit" to "Trending Korean Shows",
+        "/discover/dvd/releases_500.json" to "Trending Movie DVD Releases",
+        "/discover/trending/movies/month_500.json" to "Trending Movie This Month",
+        "/discover/trending/tv/month_500.json" to "Trending Series This Month",
+        "/discover/trending/month_500.json" to "Trending This Month",
+        "/discover/trending/anime/month_500.json" to "Trending Anime This Month",
+        "/movies/genres/all/all-types/all-countries/all-years/rank?limit=$mediaLimit" to "Top Rated Movies",
+        "/tv/genres/all/all-types/all-countries/all-networks/all-years/rank?limit=$mediaLimit" to "Top Rated Shows",
+        "/anime/genres/all/all-types/all-countries/all-networks/all-years/rank?limit=$mediaLimit" to "Top Rated Anime",
+        "/tv/genres/all/all-types/kr/all-networks/all-years/rank?limit=$mediaLimit" to "Top Rated Korean Shows",
+        "/anime/premieres/soon?type=all&limit=$mediaLimit" to "Upcoming Anime",
+        "Personal" to "Personal",
+    )
+
+    private fun getSimklIdAndType(url: String): Pair<String, String> {
+        val id =  url.split('/')
+            .filter { part -> part.toIntOrNull() != null } // Keep only numeric parts
+            .firstOrNull() ?: "" // Take the first numeric ID found
+
+        val type = when {
+            url.contains("/movies/") -> "movies"
+            url.contains("/anime/") -> "anime"
+            else -> "tv"
+        }
+
+        return Pair(id, type)
+    }
+
+    private fun getStatus(status: String?): ShowStatus? {
+        return when (status) {
+            "airing" -> ShowStatus.Ongoing
+            "ended" -> ShowStatus.Completed
+            else -> null
+        }
+    }
+
+    // Unescapes &#039;, &amp;, &quot;, and all other HTML entities
+    private fun String?.decodeHtml(): String? {
+        return this?.let { Parser.unescapeEntities(it, false) }
+    }
+
+    private suspend fun extractNameAndYear(imdbId: String? = null): Pair<String?, Int?>? {
+        return try {
+            if (imdbId.isNullOrBlank()) return null
+
+            val response = app.get("$cinemetaAPI/meta/series/$imdbId.json")
+            if (!response.isSuccessful) {
+                return null
+            }
+
+            val jsonString = response.text
+            val rootObject = JSONObject(jsonString)
+            val metaObject = rootObject.optJSONObject("meta")
+
+            val name = metaObject?.optString("name")?.takeIf { it.isNotBlank() }
+            val year = metaObject?.optString("year")?.substringBefore("-")?.toIntOrNull()
+                    ?: metaObject?.optString("year")?.substringBefore("–")?.toIntOrNull()
+                    ?: metaObject?.optString("year")?.toIntOrNull()
+
+            Pair(name, year)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun getPosterUrl(
+        id: String? = null,
+        type: String,
+     ): String? {
+        val baseUrl = "${image_proxy}https://simkl.in"
+        if(id == null) {
+            return null
+        } else if(type == "imdb:lg") {
+            return "${image_proxy}https://live.metahub.space/logo/medium/$id/img"
+        } else if(type == "episode") {
+            return "$baseUrl/episodes/${id}_w.webp"
+        } else if(type == "poster") {
+            return "$baseUrl/posters/${id}_m.webp"
+        } else if(type == "imdb:bg") {
+            return "${image_proxy}https://images.metahub.space/background/large/$id/img"
+        } else if(type == "youtube") {
+            return "https://img.youtube.com/vi/${id}/maxresdefault.jpg"
+        } else {
+            return "$baseUrl/fanart/${id}_medium.webp"
+        }
+    }
+
+    override suspend fun quickSearch(query: String): List<SearchResponse>? = search(query,1)?.items
+
+    override suspend fun search(query: String, page: Int): SearchResponseList? = coroutineScope {
+
+        suspend fun fetchResults(type: String): List<SearchResponse> {
+            val result = runCatching {
+                val json = app.get("$apiUrl/search/$type?q=$query&page=$page&limit=$mediaLimit&extended=full&client_id=$auth", headers = headers).text
+                parseJson<Array<SimklResponse>>(json).mapNotNull {
+                    val allratings = it.ratings
+                    val score = allratings?.mal?.rating ?: allratings?.imdb?.rating
+                    val title = it.title_en ?: it.title ?: return@mapNotNull null
+                    newMovieSearchResponse(title.decodeHtml() ?: "", "${mainUrl}${it.url}") {
+                        posterUrl = getPosterUrl(it.poster, "poster")
+                        this.score = Score.from10(score)
+                    }
+                }
+            }.getOrDefault(emptyList())
+
+            if (result.isNotEmpty()) return result
+            return emptyList()
+        }
+
+        val types = listOf("movie", "tv", "anime")
+        val resultsLists = types.map {
+            async { fetchResults(it) }
+        }.awaitAll()
+
+        val maxSize = resultsLists.maxOfOrNull { it.size } ?: 0
+
+        val combinedList: List<SearchResponse> = buildList {
+            for (i in 0 until maxSize) {
+                for (list in resultsLists) {
+                    if (i < list.size) add(list[i])
+                }
+            }
+        }
+
+        newSearchResponseList(combinedList, true)
+    }
+
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
+        if (request.name.contains("Personal")) {
+            // Reading and manipulating personal library
+            repo.authUser()
+                    ?: return newHomePageResponse(
+                            "Login required for personal content.",
+                            emptyList<SearchResponse>(),
+                            false
+                    )
+            var homePageList =
+                    repo.library().getOrThrow()?.allLibraryLists?.mapNotNull {
+                        if (it.items.isEmpty()) return@mapNotNull null
+                        val libraryName =
+                                it.name.asString(activity ?: return@mapNotNull null)
+                        HomePageList("${request.name}: $libraryName", it.items)
+                    }
+                            ?: return null
+            return newHomePageResponse(homePageList, false)
+        } else {
+            val url = if(request.data.contains(".json")) {
+                simklDataAPI + request.data
+            } else  {
+                apiUrl + request.data + "&client_id=$auth&page=$page"
+            }
+             val data = app.get(url, headers = headers)
+                .parsedSafe<Array<SimklResponse>>()?.mapNotNull {
+                    val allratings = it.ratings
+                    val score = allratings?.mal?.rating ?: allratings?.imdb?.rating
+                    val title = it.title ?: return@mapNotNull null
+                    newMovieSearchResponse(title.decodeHtml() ?: "", "${mainUrl}${it.url?.replace("movie", "movies")}") {
+                        this.posterUrl = getPosterUrl(it.poster, "poster")
+                        this.score = Score.from10(score)
+                    }
+                } ?: return null
+
+            return newHomePageResponse(
+                list = HomePageList(
+                    name = request.name,
+                    list = data,
+                ),
+                hasNext = if(request.data.contains("limit=")) true else false
+            )
+        }
+    }
+
+    override suspend fun load(url: String): LoadResponse {
+        val (simklId, simklType) = getSimklIdAndType(url)
+        var res = app.get(
+            "$apiUrl/$simklType/$simklId?client_id=$auth2&extended=full",
+            headers = headers,
+            allowRedirects = false
+        )
+
+        if(res.code in 300..399) {
+            var location = res.headers["Location"] ?: res.headers["location"]
+            if(location != null) {
+                if(!location.contains("extended=full")) location += "&extended=full"
+                res = app.get(fixUrl(location, apiUrl), headers = headers)
+            }
+        }
+
+        val jsonString = res.text
+        val json = parseJson<SimklResponse>(jsonString)
+        val genres = json.genres?.map { it }
+        val tvType = json.type.orEmpty()
+        val country = json.country.orEmpty()
+        val isAnime = tvType == "anime"
+        val isBollywood = country == "IN"
+        val isCartoon = genres?.contains("Animation") == true
+        val isAsian = !isAnime && country in listOf("JP", "KR", "CN")
+        val ids = json.ids
+        val allRatings = json.ratings
+        val rating = allRatings?.mal?.rating ?: allRatings?.imdb?.rating
+        val kitsuId = ids?.kitsu
+        val anilistId = ids?.anilist?.toIntOrNull()
+        val malId = ids?.mal?.toIntOrNull()
+        val tmdbId = ids?.tmdb?.toIntOrNull()
+        val imdbId = ids?.imdb
+        val anilist_meta = anilistId?.let { getAniListInfo(it) }
+        val rawEnTitle = anilist_meta?.title ?: json.en_title ?: json.title
+        val enTitle = rawEnTitle.decodeHtml()
+        val rawOriginalTitle = anilist_meta?.romajiTitle ?: json.title
+        val originalTitle = rawOriginalTitle.decodeHtml()
+
+        val plot = if (tvType == "anime") {
+            val altTitles = listOfNotNull(anilist_meta?.title, json.en_title, json.title)
+            .filter { it.isNotBlank() }
+            .distinct()
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(", ", prefix = "[${"Alt Titles".toSansSerifBold()}: ", postfix = "]")
+
+            val description = anilist_meta?.description?.takeIf { it.isNotBlank() } ?: json.overview
+
+            when {
+                altTitles != null && !description.isNullOrBlank() -> "$altTitles<br><br>$description"
+                altTitles != null -> altTitles
+                else -> description ?: ""
+            }
+        } else {
+            json.overview
+        }
+
+        val imdbType = if (tvType == "show" || json.anime_type?.equals("tv") == true) "series" else tvType
+        val tvdbData = if(!isAnime) getTvdbData(imdbType, imdbId) else null
+
+        val logo = imdbId?.let { getPosterUrl(it, "imdb:lg") }
+        val firstTrailerId = json.trailers?.firstOrNull()?.youtube
+        val trailerLink = firstTrailerId?.let { "https://www.youtube.com/watch?v=$it" }
+
+        val backgroundPosterUrl =
+            tvdbData?.background
+            ?: checkPosterAvailable(getPosterUrl(imdbId, "imdb:bg"))
+            ?: anilist_meta?.banner
+            ?: getPosterUrl(json.fanart, "fanart")
+            ?: getPosterUrl(firstTrailerId, "youtube")
+
+        val poster = tvdbData?.poster ?: getPosterUrl(json.poster, "poster")
+
+        val recommendations = buildList {
+            json.relations?.forEach {
+                val prefix = it.relation_type?.replaceFirstChar { c -> c.uppercase() }?.let { "($it) " } ?: ""
+
+                add(newMovieSearchResponse("${prefix} ${it.en_title ?: it.title}", "$mainUrl/$tvType/${it.ids.simkl}/${it.ids.slug}") {
+                    this.posterUrl = getPosterUrl(it.poster, "poster")
+                })
+            }
+
+            json.users_recommendations?.forEach {
+                add(newMovieSearchResponse(it.en_title ?: it.title ?: "", "$mainUrl/$tvType/${it.ids.simkl}/${it.ids.slug}") {
+                    this.posterUrl = getPosterUrl(it.poster, "poster")
+                })
+            }
+        }
+
+        val duration = json.runtimeInMinutes?.let { rt -> json.total_episodes?.let { eps -> rt * eps } ?: rt }
+
+        if (tvType == "movie" || (tvType == "anime" && json.anime_type?.equals("movie") == true)) {
+            val data = LoadLinksData(
+                enTitle,
+                originalTitle,
+                tvType,
+                simklId.toIntOrNull(),
+                imdbId,
+                tmdbId,
+                json.year,
+                anilistId,
+                malId,
+                kitsuId,
+                null,
+                null,
+                null,
+                isAnime,
+                isBollywood,
+                isAsian,
+                isCartoon
+            ).toJson()
+            return newMovieLoadResponse("${enTitle}", url, if(isAnime) TvType.AnimeMovie  else TvType.Movie, data) {
+                this.posterUrl = poster
+                this.backgroundPosterUrl = backgroundPosterUrl
+                this.plot = plot
+                this.tags = genres
+                this.comingSoon = isUpcoming(json.released)
+                this.duration = duration
+                this.score = Score.from10(rating)
+                this.year = json.year
+                this.actors = tvdbData?.cast
+                this.logoUrl = logo
+                this.recommendations = recommendations
+                this.contentRating = json.certification
+                this.addSimklId(simklId.toInt())
+                this.addAniListId(anilistId)
+                this.addMalId(malId)
+                this.addTrailer(trailerLink)
+            }
+        } else {
+            val epsJson = app.get("$apiUrl/tv/episodes/$simklId?client_id=$auth2&extended=full", headers = headers).text
+
+            Log.d("CineSimkl", "epsJson: $epsJson")
+
+            val eps = parseJson<Array<Episodes>>(epsJson)
+            val episodes = eps.filter { it.type != "special" }.map {
+                newEpisode(
+                    LoadLinksData(
+                        enTitle,
+                        originalTitle,
+                        tvType,
+                        simklId.toIntOrNull(),
+                        imdbId,
+                        tmdbId,
+                        json.year,
+                        anilistId,
+                        malId,
+                        kitsuId,
+                        it.season,
+                        it.episode,
+                        it.date.toString().substringBefore("-").toIntOrNull(),
+                        isAnime,
+                        isBollywood,
+                        isAsian,
+                        isCartoon,
+                        it.tvdb?.season ?: json.season?.toIntOrNull(),
+                        it.tvdb?.episode
+                    ).toJson()
+                ) {
+                    this.name = it.title + if(it.aired == false) " • [UPCOMING]" else ""
+                    this.season = it.season
+                    this.episode = it.episode
+                    this.description = it.description
+                    this.posterUrl = getPosterUrl(it.img, "episode") ?: no_image
+                    addDate(it.date, "yyyy-MM-dd'T'HH:mm:ssXXX")
+                }
+            }
+
+            return newAnimeLoadResponse("${enTitle}", url, if(tvType == "anime") TvType.Anime else TvType.TvSeries) {
+                addEpisodes(DubStatus.Subbed, episodes)
+                this.posterUrl = poster
+                this.backgroundPosterUrl = backgroundPosterUrl
+                this.plot = plot
+                this.tags = genres
+                this.duration = duration
+                this.score = Score.from10(rating)
+                this.year = json.year
+                this.logoUrl = logo
+                this.actors = tvdbData?.cast
+                this.showStatus = getStatus(json.status)
+                this.recommendations = recommendations
+                this.contentRating = json.certification
+                this.addSimklId(simklId.toInt())
+                this.addAniListId(anilistId)
+                this.addMalId(malId)
+                this.addTrailer(trailerLink)
+            }
+        }
+    }
+
+    override suspend fun loadLinks(
+            data: String,
+            isCasting: Boolean,
+            subtitleCallback: (SubtitleFile) -> Unit,
+            callback: (ExtractorLink) -> Unit
+    ): Boolean {
+
+        Log.d("CineSimkl", data)
+
+        val res = parseJson<LoadLinksData>(data)
+        if(res.isAnime) {
+            val (imdbTitle, imdbYear) = try {
+                extractNameAndYear(res.imdbId) ?: Pair(res.title, res.year)
+            } catch (e: Exception) {
+                Pair(res.title, res.year)
+            }
+
+            invokeAllAnimeSources(
+                AllLoadLinksData(
+                    res.title,
+                    res.imdbId,
+                    res.tmdbId,
+                    res.anilistId,
+                    res.malId,
+                    res.kitsuId,
+                    res.year,
+                    res.airedYear,
+                    res.season,
+                    res.episode,
+                    res.isAnime,
+                    res.isBollywood,
+                    res.isAsian,
+                    res.isCartoon,
+                    res.original_title,
+                    imdbTitle,
+                    res.imdbSeason,
+                    res.imdbEpisode,
+                    imdbYear,
+                ),
+                subtitleCallback,
+                callback
+            )
+        } else {
+            invokeAllSources(
+                AllLoadLinksData(
+                    res.title,
+                    res.imdbId,
+                    res.tmdbId,
+                    res.anilistId,
+                    res.malId,
+                    res.kitsuId,
+                    res.year,
+                    res.airedYear,
+                    res.season,
+                    res.episode,
+                    res.isAnime,
+                    res.isBollywood,
+                    res.isAsian,
+                    res.isCartoon,
+                    res.original_title,
+                    null,
+                    null,
+                    null,
+                    null,
+                ),
+                subtitleCallback,
+                callback
+            )
+        }
+        return true
+    }
+
+    data class SimklResponse (
+        var title                 : String?                          = null,
+        var en_title              : String?                          = null,
+        var title_en              : String?                          = null,
+        var year                  : Int?                             = null,
+        var released              : String?                          = null,
+        var type                  : String?                          = null,
+        var url                   : String?                          = null,
+        var poster                : String?                          = null,
+        var fanart                : String?                          = null,
+        var ids                   : Ids?                             = Ids(),
+        var release_date          : String?                          = null,
+        var ratings               : Ratings?                         = Ratings(),
+        var country               : String?                          = null,
+        var certification         : String?                          = null,
+        var runtime               : Any?                             = null,
+        var status                : String?                          = null,
+        var total_episodes        : Int?                             = null,
+        var network               : String?                          = null,
+        var overview              : String?                          = null,
+        var anime_type            : String?                          = null,
+        var season                : String?                          = null,
+        var endpoint_type         : String?                          = null,
+        var genres                : ArrayList<String>?               = null,
+        var users_recommendations : ArrayList<UsersRecommendations>? = null,
+        var relations             : ArrayList<Relations>?            = null,
+        var trailers              : ArrayList<Trailers>?             = null,
+    ) {
+        //Strip everything except the numbers!
+        val runtimeInMinutes: Int?
+        get() = runtime?.toString()?.filter { it.isDigit() }?.toIntOrNull()
+    }
+
+    data class Trailers (
+        var name    : String? = null,
+        var youtube : String? = null,
+    )
+    data class Ids (
+        var simkl_id : Int?    = null,
+        var tmdb     : String? = null,
+        var imdb     : String? = null,
+        var slug     : String? = null,
+        var mal      : String? = null,
+        var anilist  : String? = null,
+        var kitsu    : String? = null,
+        var anidb    : String? = null,
+        var simkl    : Int?    = null,
+        var tvdb     : String? = null
+    )
+
+    data class Ratings (
+        var simkl : Simkl? = Simkl(),
+        var imdb  : Imdb?  = Imdb(),
+        var mal   : Mal?   = Mal()
+    )
+
+    data class Simkl (
+        var rating : Double? = null,
+        var votes  : Int?    = null
+    )
+
+    data class Imdb (
+        var rating : Double? = null,
+        var votes  : Int?    = null
+    )
+
+    data class Mal (
+        var rating : Double? = null,
+        var votes  : Int?    = null
+    )
+
+    data class UsersRecommendations (
+        var title        : String? = null,
+        var en_title     : String?  = null,
+        var year         : Int?    = null,
+        var poster       : String? = null,
+        var type         : String? = null,
+        var ids          : Ids     = Ids()
+    )
+
+    data class Relations (
+        var title         : String?  = null,
+        var en_title      : String?  = null,
+        var poster        : String?  = null,
+        var anime_type    : String?  = null,
+        var relation_type : String?  = null,
+        var ids           : Ids     = Ids()
+    )
+
+    data class Episodes (
+        var title       : String?  = null,
+        var season      : Int?     = null,
+        var episode     : Int?     = null,
+        var type        : String?  = null,
+        var description : String?  = null,
+        var aired       : Boolean  = false,
+        var img         : String?  = null,
+        var date        : String?  = null,
+        var tvdb        : Tvdb?    = Tvdb(),
+    )
+
+    data class Tvdb (
+        var season  : Int? = null,
+        var episode : Int? = null
+    )
+
+    data class LoadLinksData(
+        val title       : String? = null,
+        val original_title    : String? = null,
+        val tvtype      : String? = null,
+        val simklId     : Int?    = null,
+        val imdbId      : String? = null,
+        val tmdbId      : Int?    = null,
+        val year        : Int?    = null,
+        val anilistId   : Int?    = null,
+        val malId       : Int?    = null,
+        val kitsuId     : String? = null,
+        val season      : Int?    = null,
+        val episode     : Int?    = null,
+        val airedYear   : Int?    = null,
+        val isAnime     : Boolean = false,
+        val isBollywood : Boolean = false,
+        val isAsian     : Boolean = false,
+        val isCartoon   : Boolean = false,
+        val imdbSeason  : Int?    = null,
+        val imdbEpisode : Int?    = null,
+    )
+}
